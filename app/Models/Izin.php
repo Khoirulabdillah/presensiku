@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Izin extends Model
 {
+    protected $table = 'izin';
+
     protected $fillable = [
         'nip',
         'jenis_izin',
@@ -14,6 +16,7 @@ class Izin extends Model
         'tanggal_selesai',
         'keterangan',
         'bukti_path',
+        'catatan_admin',
     ];
 
     public function pegawai()

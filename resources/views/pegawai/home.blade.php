@@ -9,7 +9,7 @@
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             {{-- Informasi Jadwal --}}
             <div>
-                <p class="text-xl font-bold text-gray-800">Reguler</p>
+                {{-- <p class="text-xl font-bold text-gray-800">Reguler</p> --}}
                 <p class="text-sm text-gray-500 mt-1" id="tanggal">Senin, 11 November 2025</p>
                 <p class="text-sm text-gray-600 mt-1">08.00 - 17.00 WIB</p>
                 <p class="text-md font-semibold text-green-600 mt-2">Masuk: 08:00</p>
@@ -51,7 +51,7 @@
             
             {{-- Menu Presensi --}}
             <div class="flex flex-col items-center">
-                <a href="#" class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
+                <a href="{{ route('pegawai.presensi.index') }}" class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
                     <i class="fa-solid fa-camera text-3xl sm:text-4xl text-blue-600"></i>
                 </a>
                 <span class="text-sm sm:text-md font-medium text-gray-700 mt-2 text-center">Presensi</span>
@@ -67,10 +67,10 @@
 
             {{-- Menu Riwayat (Contoh Penambahan) --}}
             <div class="flex flex-col items-center">
-                <a href="#" class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
+                <a  class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
                     <i class="fa-solid fa-clock-rotate-left text-3xl sm:text-4xl text-green-600"></i>
                 </a>
-                <span class="text-sm sm:text-md font-medium text-gray-700 mt-2 text-center">Riwayat</span>
+                <span class="text-sm sm:text-md font-medium text-gray-700 mt-2 text-center">Riwayat Presensi</span>
             </div>
         </div>
     </div>

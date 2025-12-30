@@ -24,23 +24,27 @@
                     <i class="fas fa-tachometer-alt text-lg"></i>
                     <span>Dashboard</span>
                 </a>
-                <a class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
+                <a href="{{ route('admin.presensi.index') }}" class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
                     <i class="fas fa-calendar-check text-lg"></i>
                     <span>Presensi</span>
                 </a>
-                <div class="relative">
+                <a href="{{ route('admin.izin.index') }}" class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
+                    <i class="fas fa-file-alt text-lg"></i>
+                    <span>Izin</span>
+                </a>
                 <a 
-                    href="{{ route('admin.pegawai.index') }}" 
+                    href="{{ route('admin.pegawai.index') }}"
                     class="flex items-center justify-between w-full gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition bg-blue-500 text-white">
                     <div class="flex items-center gap-3">
                         <i class="fas fa-users text-lg"></i>
                         <span>Pegawai</span>
                     </div>
                 </a>
-            </div>
+                <a href="{{ route('admin.office-settings.index') }}" class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
+                    <i class="fas fa-map-marker-alt text-lg"></i>
+                    <span>Lokasi Kantor</span>
                 </a>
-                </a>
-                <a class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
+                <a href="{{ route('admin.setting-waktu.index') }}" class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
                     <i class="fa-solid fa-clock text-lg"></i>
                     <span>Seting Waktu</span>
                 </a>
@@ -69,7 +73,7 @@
 
             <!-- Dynamic Content -->
             <div id="content-area" class="rounded-2xl">
-            {{ $slot }}
+            @yield('content')
         </div>
         </div>
     </div>

@@ -1,4 +1,8 @@
-<x-headeradmin>
+@extends('layouts.app')
+
+@section('title', 'Register Admin')
+
+@section('content')
     <form method="POST" action="{{ route('admin.register.store') }}">
         @csrf
 
@@ -81,4 +85,4 @@
             </x-primary-button>
         </div>
     </form>
-</x-headeradmin>
+@endsection

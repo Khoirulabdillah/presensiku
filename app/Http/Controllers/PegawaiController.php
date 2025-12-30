@@ -17,9 +17,9 @@ class PegawaiController extends Controller
      */
     public function index()
     {
-        $pegawai = Pegawai::with(['divisi', 'user'])->get();
+        $pegawai = Pegawai::with(['divisi', 'user'])->paginate(10);
 
-        return view('admin.pegawai-index', compact('pegawai'));
+        return view('admin.pegawai', compact('pegawai'));
     }
 
     /**
@@ -132,7 +132,16 @@ class PegawaiController extends Controller
             'nama_pegawai' => 'required|string|max:100',
             'jabatan' => 'required|string|max:50',
             'divisi_id' => 'required|exists:divisi,id',
+            'password' => 'nullable|confirmed|min:6',
         ]);
+
+        // Update password if provided
+        if (!empty($validated['password'])) {
+            $user = User::find($pegawai->users_id);
+            if ($user) {
+                $user->update(['password' => $validated['password']]);
+            }
+        }
 
         // If NIP changed, we need to update primary key field
         if ($validated['nip'] !== $pegawai->nip) {

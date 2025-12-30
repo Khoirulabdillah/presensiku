@@ -6,15 +6,28 @@ use Illuminate\Database\Eloquent\Model;
 
 class Presensi extends Model
 {
+    protected $table = 'presensi';
+
     protected $fillable = [
-        'pegawai_id',
+        'nip',
         'tanggal_presensi',
-        'waktu_masuk',
-        'waktu_pulang',
+        'jam_masuk',
+        'jam_pulang',
+        'foto_masuk',
+        'foto_pulang',
+        'type',
+        'latitude',
+        'longitude',
+    ];
+
+    protected $casts = [
+        'tanggal_presensi' => 'date',
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
     ];
 
     public function pegawai()
     {
-        return $this->belongsTo(Pegawai::class, 'pegawai_id');
+        return $this->belongsTo(Pegawai::class, 'nip', 'nip');
     }
 }
