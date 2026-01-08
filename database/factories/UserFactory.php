@@ -23,19 +23,18 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
-        $faker = $this->faker ?? (class_exists(\Faker\Factory::class) ? \Faker\Factory::create() : null);
-        if ($faker === null) {
-            $faker = new class {
-                public function name()
-                {
-                    return 'User ' . substr(md5(uniqid('', true)), 0, 6);
-                }
-                public function userName()
-                {
-                    return 'user' . rand(1000, 9999);
-                }
-            };
-        }
+        // Use the factory-provided faker when available. If it's not present (production without dev deps),
+        // provide a minimal fallback object so seeding doesn't fail.
+        $faker = $this->faker ?? new class {
+            public function name()
+            {
+                return 'User ' . substr(md5(uniqid('', true)), 0, 6);
+            }
+            public function userName()
+            {
+                return 'user' . rand(1000, 9999);
+            }
+        };
 
         return [
             'name' => $faker->name(),
