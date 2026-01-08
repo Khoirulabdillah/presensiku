@@ -332,7 +332,8 @@ document.addEventListener('DOMContentLoaded', function() {
             descriptor = null;
         }
 
-        // Get Location
+        // Get Location (high accuracy preferred)
+        const geoOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
         navigator.geolocation.getCurrentPosition(async (pos) => {
             try {
                 const payload = {
@@ -369,7 +370,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 faceStatus.textContent = 'Status: Selesai';
             }
         }, (err) => {
-            alert('Gagal mendapatkan lokasi. Harap aktifkan GPS Anda.');
+            // Improve error messages for common geolocation failures
+            if (err.code === 1) {
+                alert('Izin lokasi ditolak. Aktifkan izin lokasi di browser dan akses situs melalui HTTPS.');
+            } else if (err.code === 2) {
+                alert('Lokasi tidak dapat ditentukan. Pastikan perangkat Anda memiliki sinyal GPS atau koneksi internet.');
+            } else if (err.code === 3) {
+                alert('Timeout mendapatkan lokasi. Coba lagi atau periksa pengaturan lokasi.');
+            } else {
+                alert('Gagal mendapatkan lokasi. Harap aktifkan GPS Anda.');
+            }
         });
     }
 
