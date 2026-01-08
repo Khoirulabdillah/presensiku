@@ -77,7 +77,17 @@
                 <label for="foto_wajah_asli" class="block text-sm font-medium text-gray-700 mb-1">Foto Wajah Referensi (opsional)</label>
                 @if(!empty($pegawai->foto_wajah_asli))
                     <div class="mb-2">
-                        <img src="{{ asset('storage/' . $pegawai->foto_wajah_asli) }}" alt="Foto Wajah" class="h-20 w-20 object-cover rounded-md border">
+                        @php
+                            $photoPath = $pegawai->foto_wajah_asli;
+                            $showUrl = null;
+                        @endphp
+                        @if(\Illuminate\Support\Facades\Storage::disk('public')->exists($photoPath))
+                            @php $showUrl = asset('storage/' . $photoPath); @endphp
+                        @else
+                            @php $showUrl = route('storage.image', ['path' => $photoPath]); @endphp
+                        @endif
+
+                        <img src="{{ $showUrl }}" alt="Foto Wajah" class="h-20 w-20 object-cover rounded-md border">
                     </div>
                 @endif
                 <input type="file" name="foto_wajah_asli" id="foto_wajah_asli" accept="image/*"

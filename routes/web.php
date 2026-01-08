@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PegawaiController;
 use App\Http\Controllers\IzinController;
 use App\Http\Controllers\PresensiController;
+use App\Http\Controllers\StorageController;
 use App\Http\Controllers\OfficeSettingController;
 use App\Http\Controllers\AdminController;
 
@@ -85,6 +86,9 @@ Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'inde
 //Route presensi untuk pegawai
     Route::get('/pegawai/presensi', [PresensiController::class, 'index'])->middleware('auth')->name('pegawai.presensi.index');
     Route::post('/pegawai/presensi', [PresensiController::class, 'store'])->middleware('auth')->name('pegawai.presensi.store');
+
+// Serve storage images when public/storage symlink is not available
+Route::get('/storage/image/{path}', [StorageController::class, 'image'])->where('path', '.*')->name('storage.image');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
