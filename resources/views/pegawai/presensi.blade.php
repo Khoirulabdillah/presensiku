@@ -165,6 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let faceModel = null;
     let faceDetected = false;
     let isDetecting = false;
+    let lastFaceBox = null; // store last fast-detection box for faster descriptor crop
 
     // Timer
     setInterval(() => {
@@ -222,14 +223,15 @@ document.addEventListener('DOMContentLoaded', function() {
             faceStatus.className = 'text-xs font-bold text-green-600';
             
             // Draw Box
-            predictions.forEach(pred => {
-                const start = pred.topLeft;
-                const end = pred.bottomRight;
-                const size = [end[0] - start[0], end[1] - start[1]];
-                overlayCtx.strokeStyle = "#10B981";
-                overlayCtx.lineWidth = 4;
-                overlayCtx.strokeRect(start[0], start[1], size[0], size[1]);
-            });
+            // use first prediction as primary
+            const pred = predictions[0];
+            const start = pred.topLeft;
+            const end = pred.bottomRight;
+            const size = [end[0] - start[0], end[1] - start[1]];
+            overlayCtx.strokeStyle = "#10B981";
+            overlayCtx.lineWidth = 4;
+            overlayCtx.strokeRect(start[0], start[1], size[0], size[1]);
+            lastFaceBox = { x: start[0], y: start[1], width: size[0], height: size[1] };
 
             // Aktifkan tombol jika belum absen
             @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
@@ -240,6 +242,7 @@ document.addEventListener('DOMContentLoaded', function() {
             faceStatus.className = 'text-xs font-bold text-red-600';
             presensiMasukBtn.disabled = true;
             presensiPulangBtn.disabled = true;
+            lastFaceBox = null;
         }
 
         if (isDetecting) requestAnimationFrame(detectFrame);
@@ -298,20 +301,34 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-        // Compute descriptor from captured image (face-api) if available
+        // Compute descriptor from captured image (face-api) if available.
+        // Use the last fast-detection box to crop a small region — much faster than running full-frame face-api detection.
         let descriptor = null;
         if (faceApiAvailable) {
             try {
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
-                const img = await faceapi.bufferToImage(blob);
-                const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-                if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+                if (lastFaceBox) {
+                    const tc = document.createElement('canvas');
+                    tc.width = Math.max(80, Math.round(lastFaceBox.width));
+                    tc.height = Math.max(80, Math.round(lastFaceBox.height));
+                    const tctx = tc.getContext('2d');
+                    // draw the detected face region from the video onto small canvas
+                    tctx.drawImage(video, lastFaceBox.x, lastFaceBox.y, lastFaceBox.width, lastFaceBox.height, 0, 0, tc.width, tc.height);
+                    const blob = await new Promise(resolve => tc.toBlob(resolve, 'image/jpeg', 0.7));
+                    const img = await faceapi.bufferToImage(blob);
+                    const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+                } else {
+                    // fallback to whole-canvas descriptor (slower)
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+                    const img = await faceapi.bufferToImage(blob);
+                    const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+                }
             } catch (err) {
                 console.warn('descriptor error', err);
                 descriptor = null;
             }
         } else {
-            // face-api not available; skip descriptor
             descriptor = null;
         }
 
