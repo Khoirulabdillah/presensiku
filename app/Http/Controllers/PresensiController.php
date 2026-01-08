@@ -85,8 +85,9 @@ class PresensiController extends Controller
             }
 
             // 5. Kirim ke Flask (Gunakan 'source_image' dan 'target_image' sesuai file Flask Anda)
-            // GANTI URL DI BAWAH INI SESUAI URL FLASK ANDA (pastikan menyertakan scheme http/https)
-            $urlFlask = 'https://presensiku.pribumics.my.id/python-api/compare'; 
+            // URL Flask compare service configurable via env `FLASK_COMPARE_URL`.
+            // Default keeps existing public URL if env not set.
+            $urlFlask = env('FLASK_COMPARE_URL', 'https://presensiku.pribumics.my.id/python-api/compare');
             
             $response = Http::attach(
                 'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
