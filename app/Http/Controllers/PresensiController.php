@@ -67,6 +67,8 @@ class PresensiController extends Controller
             Storage::disk('public')->put($tmpRelative, $imageBinary);
             $tempPath = storage_path('app/public/' . $tmpRelative);
 
+            $faceMatched = false; // will be set true when verification passes
+
             // 3. Siapkan Path Foto Referensi (Foto Asli Pegawai)
             $sourceImagePath = storage_path('app/public/' . $pegawai->foto_wajah_asli);
 
@@ -219,7 +221,10 @@ class PresensiController extends Controller
                 $data
             );
 
-            return response()->json(['success' => true, 'message' => 'Presensi berhasil dicatat.']);
+            // mark successful verification
+            $faceMatched = true;
+
+            return response()->json(['success' => true, 'message' => 'Presensi berhasil dicatat.', 'face_match' => $faceMatched]);
 
         } catch (\Exception $e) {
             Log::error('Presensi Error: ' . $e->getMessage());

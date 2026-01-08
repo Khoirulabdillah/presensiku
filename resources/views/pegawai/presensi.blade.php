@@ -348,10 +348,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 if (response.data.success) {
-                    alert(response.data.message);
-                    location.reload();
+                    // show friendly notification and indicate face matched
+                    const statusText = document.getElementById('status-text');
+                    if (response.data.face_match) {
+                        statusText.textContent = 'Wajah cocok — ' + response.data.message;
+                    } else {
+                        statusText.textContent = response.data.message;
+                    }
+                    document.getElementById('status-message').classList.remove('hidden');
+                    // short delay so user sees message, then reload to update UI
+                    setTimeout(() => location.reload(), 1100);
                 } else {
                     alert('Gagal: ' + response.data.message);
+                    document.getElementById('status-text').textContent = response.data.message;
+                    document.getElementById('status-message').classList.remove('hidden');
                 }
             } catch (err) {
                 alert('Error: ' + (err.response?.data?.message || 'Terjadi kesalahan sistem'));
