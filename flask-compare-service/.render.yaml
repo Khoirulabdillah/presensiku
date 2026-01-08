@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: presensi-compare
+    env: docker
+    plan: free
+    dockerfilePath: Dockerfile
+    startCommand: "gunicorn --bind 0.0.0.0:5000 app:app"
+    envVars:
+      - key: FLASK_ENV
+        value: production
