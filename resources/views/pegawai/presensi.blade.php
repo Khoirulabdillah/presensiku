@@ -38,6 +38,15 @@
                     <div>
                         <p class="font-semibold text-green-800">Presensi Masuk</p>
                         <p class="text-sm text-green-600">{{ $presensiMasuk->jam_masuk }}</p>
+                        @if(!empty($presensiMasuk->foto_masuk))
+                            @php
+                                $pPath = $presensiMasuk->foto_masuk;
+                                $pUrl = Storage::disk('public')->exists($pPath) ? asset('storage/' . $pPath) : route('storage.image', ['path' => $pPath]);
+                            @endphp
+                            <div class="mt-3">
+                                <img src="{{ $pUrl }}" alt="Foto Masuk" class="h-24 w-24 object-cover rounded-md border">
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -50,6 +59,15 @@
                     <div>
                         <p class="font-semibold text-blue-800">Presensi Pulang</p>
                         <p class="text-sm text-blue-600">{{ $presensiPulang->jam_pulang }}</p>
+                        @if(!empty($presensiPulang->foto_pulang))
+                            @php
+                                $ppPath = $presensiPulang->foto_pulang;
+                                $ppUrl = Storage::disk('public')->exists($ppPath) ? asset('storage/' . $ppPath) : route('storage.image', ['path' => $ppPath]);
+                            @endphp
+                            <div class="mt-3">
+                                <img src="{{ $ppUrl }}" alt="Foto Pulang" class="h-24 w-24 object-cover rounded-md border">
+                            </div>
+                        @endif
                     </div>
                 </div>
             </div>
