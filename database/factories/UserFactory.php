@@ -23,9 +23,23 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        $faker = $this->faker ?? (class_exists(\Faker\Factory::class) ? \Faker\Factory::create() : null);
+        if ($faker === null) {
+            $faker = new class {
+                public function name()
+                {
+                    return 'User ' . substr(md5(uniqid('', true)), 0, 6);
+                }
+                public function userName()
+                {
+                    return 'user' . rand(1000, 9999);
+                }
+            };
+        }
+
         return [
-            'name' => ($this->faker ?? \Faker\Factory::create())->name(),
-            'username' => ($this->faker ?? \Faker\Factory::create())->userName(),
+            'name' => $faker->name(),
+            'username' => $faker->userName(),
             'password' => Hash::make('password'),
             'role' => 'user',
             'remember_token' => Str::random(10),
