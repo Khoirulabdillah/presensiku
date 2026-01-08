@@ -87,15 +87,38 @@ class PresensiController extends Controller
             // 5. Browser-side verification path: if client supplied descriptor, compare here.
             $clientDescriptor = $request->input('photo_descriptor');
             $browserTolerance = floatval(env('BROWSER_TOLERANCE', 0.6));
+            $urlFlask = env('FLASK_COMPARE_URL');
 
-            if ($clientDescriptor && !empty($pegawai->foto_wajah_encoding)) {
-                // compute Euclidean distance between client descriptor and stored encoding
-                $stored = $pegawai->foto_wajah_encoding; // casted to array by model
-                if (is_array($stored) && is_array($clientDescriptor)) {
-                    // allow stored to be either flat array or nested (first element)
+            if ($clientDescriptor) {
+                // Try to use stored encoding if available; otherwise request one-time encoding from Flask and cache it.
+                $stored = $pegawai->foto_wajah_encoding;
+
+                if (empty($stored) && $urlFlask) {
+                    try {
+                        $encodeResp = Http::timeout(10)->attach('image', fopen($sourceImagePath, 'r'), 'source.jpg')
+                            ->post(rtrim($urlFlask, '/') . '/encode', [
+                                'model' => env('FLASK_MODEL', 'hog'),
+                                'num_jitters' => env('FLASK_NUM_JITTERS', 0),
+                            ]);
+
+                        $encData = $encodeResp->json();
+                        if ($encodeResp->successful() && isset($encData['encoding']) && is_array($encData['encoding'])) {
+                            $pegawai->foto_wajah_encoding = $encData['encoding'];
+                            $pegawai->save();
+                            $stored = $pegawai->foto_wajah_encoding;
+                        } else {
+                            Log::warning('Presensi: encode failed or no encoding returned', ['nip' => $pegawai->nip, 'resp' => $encData, 'temp' => $tmpRelative]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning('Presensi: encode request failed', ['nip' => $pegawai->nip, 'error' => $e->getMessage(), 'temp' => $tmpRelative]);
+                    }
+                }
+
+                if (!empty($stored) && is_array($stored) && is_array($clientDescriptor)) {
                     $ref = count($stored) === count($clientDescriptor) ? $stored : ($stored[0] ?? $stored);
                     $sum = 0.0;
-                    for ($i = 0; $i < count($ref); $i++) {
+                    $len = min(count($ref), count($clientDescriptor));
+                    for ($i = 0; $i < $len; $i++) {
                         $d = ($ref[$i] - $clientDescriptor[$i]);
                         $sum += $d * $d;
                     }
@@ -106,9 +129,38 @@ class PresensiController extends Controller
                         return response()->json(['success' => false, 'message' => 'Wajah tidak cocok (distance: ' . round($dist, 4) . ')'], 422);
                     }
                     // matched — continue to save
+                } else {
+                    // If still no stored encoding, fallback to Flask full compare if available
+                    if ($urlFlask) {
+                        $tolerance = env('FLASK_TOLERANCE', 0.50);
+                        $numJitters = env('FLASK_NUM_JITTERS', 2);
+                        $model = env('FLASK_MODEL', 'hog');
+
+                        $response = Http::attach(
+                            'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
+                        )->attach(
+                            'target_image', fopen($tempPath, 'r'), 'target.jpg'
+                        )->timeout(15)->post($urlFlask, [
+                            'tolerance' => $tolerance,
+                            'num_jitters' => $numJitters,
+                            'model' => $model,
+                        ]);
+
+                        $resData = $response->json();
+
+                        if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
+                            $msg = $resData['error'] ?? 'Wajah tidak cocok';
+                            Log::warning('Presensi: flask verification failed', ['nip' => $pegawai->nip, 'flask' => $resData, 'message' => $msg, 'temp' => $tmpRelative]);
+                            if (file_exists($tempPath)) @unlink($tempPath);
+                            return response()->json(['success' => false, 'message' => $msg], 422);
+                        }
+                    } else {
+                        if (file_exists($tempPath)) @unlink($tempPath);
+                        return response()->json(['success' => false, 'message' => 'Tidak dapat memverifikasi wajah (no encoding).'], 422);
+                    }
                 }
             } else {
-                // Fallback: call existing Flask service if available (for accounts without stored encoding)
+                // No client descriptor: existing fallback behavior
                 $urlFlask = env('FLASK_COMPARE_URL');
                 if ($urlFlask) {
                     $tolerance = env('FLASK_TOLERANCE', 0.50);

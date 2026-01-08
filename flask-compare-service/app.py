@@ -240,5 +240,26 @@ def compare_faces():
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/encode', methods=['POST'])
+def encode_image():
+    if 'image' not in request.files:
+        return jsonify({'error': 'Image file is required.'}), 400
+
+    img_file = request.files['image']
+    model = request.form.get('model', 'hog')
+    num_jitters = int(request.form.get('num_jitters', 0))
+
+    try:
+        img = face_recognition.load_image_file(img_file)
+        enc, loc = _first_face_encoding(img, model=model, num_jitters=num_jitters)
+        if enc is None:
+            return jsonify({'error': 'No face detected in image.'}), 400
+
+        return jsonify({'encoding': enc.tolist(), 'location': loc})
+    except Exception as e:
+        logging.exception('Encode error')
+        return jsonify({'error': str(e)}), 400
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
