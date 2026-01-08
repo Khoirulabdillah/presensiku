@@ -91,6 +91,7 @@ class PegawaiController extends Controller
             'jabatan' => 'required|string|max:50',
             'divisi_id' => 'required|exists:divisi,id',
             'foto_wajah_asli' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'foto_wajah_encoding' => 'nullable|string',
         ]);
 
         $user = User::create([
@@ -107,11 +108,16 @@ class PegawaiController extends Controller
             'nama_pegawai' => $validated['nama_pegawai'],
             'jabatan' => $validated['jabatan'],
             'foto_wajah_asli' => null,
+            'foto_wajah_encoding' => $request->input('foto_wajah_encoding') ? json_decode($request->input('foto_wajah_encoding'), true) : null,
         ]);
 
         if ($request->hasFile('foto_wajah_asli')) {
             $path = $request->file('foto_wajah_asli')->store('pegawai', 'public');
             $pegawai->update(['foto_wajah_asli' => $path]);
+            // if client provided encoding, keep it (admin create may compute it client-side)
+            if ($request->filled('foto_wajah_encoding')) {
+                $pegawai->update(['foto_wajah_encoding' => json_decode($request->input('foto_wajah_encoding'), true)]);
+            }
         }
 
         return redirect()->route('admin.pegawai.index')->with('success', 'Pegawai berhasil ditambahkan.');
@@ -142,6 +148,7 @@ class PegawaiController extends Controller
             'divisi_id' => 'required|exists:divisi,id',
             'password' => 'nullable|confirmed|min:6',
             'foto_wajah_asli' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'foto_wajah_encoding' => 'nullable|string',
         ]);
 
         // Update password if provided
@@ -192,6 +199,12 @@ class PegawaiController extends Controller
                     Storage::disk('public')->delete($pegawai->foto_wajah_asli);
                 }
                 $updateData['foto_wajah_asli'] = $path;
+                if ($request->filled('foto_wajah_encoding')) {
+                    $updateData['foto_wajah_encoding'] = json_decode($request->input('foto_wajah_encoding'), true);
+                }
+            }
+            elseif ($request->filled('foto_wajah_encoding')) {
+                $updateData['foto_wajah_encoding'] = json_decode($request->input('foto_wajah_encoding'), true);
             }
 
             $pegawai->update($updateData);

@@ -84,41 +84,60 @@ class PresensiController extends Controller
                 }
             }
 
-            // 5. Kirim ke Flask (Gunakan 'source_image' dan 'target_image' sesuai file Flask Anda)
-            // URL Flask compare service configurable via env `FLASK_COMPARE_URL`.
-            // Default keeps existing public URL if env not set.
-            $urlFlask = env('FLASK_COMPARE_URL', 'https://presensiku.pribumics.my.id/python-api/compare');
-            
-            $response = Http::attach(
-                'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
-            )->attach(
-                'target_image', fopen($tempPath, 'r'), 'target.jpg'
-            )->post($urlFlask, [
-                // tune these if necessary. num_jitters helps encoding stability but costs CPU
-                // lower tolerance => stricter match. Increase num_jitters for stability on small datasets.
-                'tolerance' => 0.50,
-                'num_jitters' => 2,
-                'model' => 'hog',
-            ]);
+            // 5. Browser-side verification path: if client supplied descriptor, compare here.
+            $clientDescriptor = $request->input('photo_descriptor');
+            $browserTolerance = floatval(env('BROWSER_TOLERANCE', 0.6));
 
-            $resData = $response->json();
-
-            // Log respons Flask untuk diagnosa
-            if ($response->failed()) {
-                Log::error('Flask compare failed', ['status' => $response->status(), 'body' => $response->body()]);
-            } else {
-                Log::info('Flask compare response', ['status' => $response->status(), 'body' => $response->body()]);
-                if (is_array($resData) && isset($resData['debug'])) {
-                    Log::debug('Flask debug', ['debug' => $resData['debug']]);
+            if ($clientDescriptor && !empty($pegawai->foto_wajah_encoding)) {
+                // compute Euclidean distance between client descriptor and stored encoding
+                $stored = $pegawai->foto_wajah_encoding; // casted to array by model
+                if (is_array($stored) && is_array($clientDescriptor)) {
+                    // allow stored to be either flat array or nested (first element)
+                    $ref = count($stored) === count($clientDescriptor) ? $stored : ($stored[0] ?? $stored);
+                    $sum = 0.0;
+                    for ($i = 0; $i < count($ref); $i++) {
+                        $d = ($ref[$i] - $clientDescriptor[$i]);
+                        $sum += $d * $d;
+                    }
+                    $dist = sqrt($sum);
+                    if ($dist > $browserTolerance) {
+                        Log::warning('Presensi: browser face verification failed', ['nip' => $pegawai->nip, 'distance' => $dist, 'threshold' => $browserTolerance, 'temp' => $tmpRelative]);
+                        if (file_exists($tempPath)) @unlink($tempPath);
+                        return response()->json(['success' => false, 'message' => 'Wajah tidak cocok (distance: ' . round($dist, 4) . ')'], 422);
+                    }
+                    // matched — continue to save
                 }
-            }
+            } else {
+                // Fallback: call existing Flask service if available (for accounts without stored encoding)
+                $urlFlask = env('FLASK_COMPARE_URL');
+                if ($urlFlask) {
+                    $tolerance = env('FLASK_TOLERANCE', 0.50);
+                    $numJitters = env('FLASK_NUM_JITTERS', 2);
+                    $model = env('FLASK_MODEL', 'hog');
 
-            // Cek jika Flask mengembalikan error (misal: wajah tidak terdeteksi)
-            if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
-                $msg = $resData['error'] ?? 'Wajah tidak cocok';
-                Log::warning('Presensi: face verification failed', ['nip' => $pegawai->nip, 'flask' => $resData, 'message' => $msg]);
-                if (file_exists($tempPath)) @unlink($tempPath);
-                return response()->json(['success' => false, 'message' => $msg], 422);
+                    $response = Http::attach(
+                        'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
+                    )->attach(
+                        'target_image', fopen($tempPath, 'r'), 'target.jpg'
+                    )->post($urlFlask, [
+                        'tolerance' => $tolerance,
+                        'num_jitters' => $numJitters,
+                        'model' => $model,
+                    ]);
+
+                    $resData = $response->json();
+
+                    if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
+                        $msg = $resData['error'] ?? 'Wajah tidak cocok';
+                        Log::warning('Presensi: flask verification failed', ['nip' => $pegawai->nip, 'flask' => $resData, 'message' => $msg, 'temp' => $tmpRelative]);
+                        if (file_exists($tempPath)) @unlink($tempPath);
+                        return response()->json(['success' => false, 'message' => $msg], 422);
+                    }
+                } else {
+                    // No client descriptor and no flask available -> cannot verify
+                    if (file_exists($tempPath)) @unlink($tempPath);
+                    return response()->json(['success' => false, 'message' => 'Tidak dapat memverifikasi wajah (no encoding).'], 422);
+                }
             }
 
             // 6. Simpan File Final dan Database

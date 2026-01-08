@@ -20,6 +20,10 @@ class Pegawai extends Model
         'nama_pegawai',
         'jabatan',
         'foto_wajah_asli',
+        'foto_wajah_encoding',
+    ];
+    protected $casts = [
+        'foto_wajah_encoding' => 'array',
     ];
     public function divisi()
     {
