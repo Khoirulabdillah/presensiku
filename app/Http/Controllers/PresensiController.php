@@ -94,8 +94,9 @@ class PresensiController extends Controller
                 'target_image', fopen($tempPath, 'r'), 'target.jpg'
             )->post($urlFlask, [
                 // tune these if necessary. num_jitters helps encoding stability but costs CPU
-                'tolerance' => 0.55,
-                'num_jitters' => 1,
+                // lower tolerance => stricter match. Increase num_jitters for stability on small datasets.
+                'tolerance' => 0.50,
+                'num_jitters' => 2,
                 'model' => 'hog',
             ]);
 
