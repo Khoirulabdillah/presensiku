@@ -64,8 +64,8 @@
 
         <div class="mb-6">
             <div class="relative bg-gray-100 rounded-lg overflow-hidden" style="height: 400px;">
-                <video id="camera" class="w-full h-full object-cover" autoplay playsinline muted></video>
-                <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+            <video id="camera" class="w-full h-full object-cover mirror" autoplay playsinline muted></video>
+            <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none mirror"></canvas>
                 <canvas id="canvas" class="hidden"></canvas>
 
                 {{-- Camera Controls --}}
@@ -104,6 +104,14 @@
         </div>
     </div>
 </div>
+
+<style>
+    /* Mirror preview for camera and overlay so it behaves like a front-facing camera */
+    #camera.mirror, #overlay.mirror {
+        transform: scaleX(-1);
+        transform-origin: center;
+    }
+</style>
 
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
