@@ -171,16 +171,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 1000);
 
     // Load face-api models for descriptor computation and fallback blazeface for fast detection
+    let faceApiAvailable = false;
     async function initAI() {
         try {
+            // try load face-api models; if any fail, we'll fallback
             await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
             await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
             await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
-            faceModel = await blazeface.load();
-            faceStatus.textContent = 'Status: AI Siap';
+            faceApiAvailable = true;
         } catch (e) {
-            console.error(e);
+            console.warn('face-api models not available:', e);
+            faceApiAvailable = false;
+        }
+
+        try {
+            faceModel = await blazeface.load();
+        } catch (e) {
+            console.warn('blazeface failed to load:', e);
+            faceModel = null;
+        }
+
+        if (faceApiAvailable) {
+            faceStatus.textContent = 'Status: AI Siap';
+            faceStatus.className = 'text-xs font-bold text-green-600';
+        } else if (faceModel) {
+            faceStatus.textContent = 'Status: AI terbatas (deteksi saja)';
+            faceStatus.className = 'text-xs font-bold text-yellow-600';
+        } else {
             faceStatus.textContent = 'Status: Gagal memuat AI';
+            faceStatus.className = 'text-xs font-bold text-red-600';
         }
     }
     initAI();
@@ -278,15 +297,21 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-        // Compute descriptor from captured image (face-api)
+        // Compute descriptor from captured image (face-api) if available
         let descriptor = null;
-        try {
-            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
-            const img = await faceapi.bufferToImage(blob);
-            const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-            if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
-        } catch (err) {
-            console.warn('descriptor error', err);
+        if (faceApiAvailable) {
+            try {
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+                const img = await faceapi.bufferToImage(blob);
+                const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+            } catch (err) {
+                console.warn('descriptor error', err);
+                descriptor = null;
+            }
+        } else {
+            // face-api not available; skip descriptor
+            descriptor = null;
         }
 
         // Get Location

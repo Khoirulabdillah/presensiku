@@ -232,22 +232,38 @@ document.addEventListener('DOMContentLoaded', async function () {
     const hiddenEnc = document.getElementById('foto_wajah_encoding');
     if (!fileInput) return;
 
-    await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
-    await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-    await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+    let editFaceApiAvailable = false;
+    try {
+        await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+        await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+        await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+        editFaceApiAvailable = true;
+    } catch (e) {
+        console.warn('face-api models not available for edit form', e);
+        editFaceApiAvailable = false;
+    }
 
     fileInput.addEventListener('change', async () => {
         const file = fileInput.files[0];
         if (!file) return;
-        const img = await faceapi.bufferToImage(file);
-        const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-        if (!detection) {
-            alert('Tidak terdeteksi wajah pada foto. Pastikan wajah jelas dan menghadap kamera.');
+        if (!editFaceApiAvailable) {
             hiddenEnc.value = '';
             return;
         }
-        const desc = Array.from(detection.descriptor);
-        hiddenEnc.value = JSON.stringify(desc);
+        try {
+            const img = await faceapi.bufferToImage(file);
+            const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+            if (!detection) {
+                alert('Tidak terdeteksi wajah pada foto. Pastikan wajah jelas dan menghadap kamera.');
+                hiddenEnc.value = '';
+                return;
+            }
+            const desc = Array.from(detection.descriptor);
+            hiddenEnc.value = JSON.stringify(desc);
+        } catch (err) {
+            console.warn('failed to compute descriptor on edit form', err);
+            hiddenEnc.value = '';
+        }
     });
 });
 </script>
