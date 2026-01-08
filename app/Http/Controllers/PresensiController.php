@@ -9,12 +9,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 
 class PresensiController extends Controller
 {
-    /**
-     * Display presensi page with camera access.
-     */
     public function index()
     {
         $user = Auth::user();
@@ -27,111 +25,93 @@ class PresensiController extends Controller
             return back()->withErrors(['error' => 'Data pegawai tidak ditemukan untuk akun ini.']);
         }
 
-        // Get all presensi today
         $today = now()->toDateString();
         $presensiHariIni = Presensi::where('nip', $pegawai->nip)
             ->whereDate('tanggal_presensi', $today)
             ->orderBy('created_at', 'asc')
             ->get();
 
-        // Separate masuk and pulang
         $presensiMasuk = $presensiHariIni->where('type', 'masuk')->first();
         $presensiPulang = $presensiHariIni->where('type', 'pulang')->first();
 
         return view('pegawai.presensi', compact('pegawai', 'presensiMasuk', 'presensiPulang'));
     }
 
-    /**
-     * Store presensi with photo capture.
-     */
     public function store(Request $request)
     {
         try {
             $user = Auth::user();
-            if (!$user) {
-                return response()->json(['success' => false, 'message' => 'Anda harus login terlebih dahulu.']);
-            }
-
             $pegawai = Pegawai::where('users_id', $user->id)->first();
-            if (!$pegawai) {
-                return response()->json(['success' => false, 'message' => 'Data pegawai tidak ditemukan.']);
-            }
 
-            // Validate that pegawai has original face photo
-            if (!$pegawai->foto_wajah_asli) {
-                return response()->json(['success' => false, 'message' => 'Foto wajah asli tidak ditemukan di profil Anda.'], 422);
-            }
-
+            // 1. Validasi Input Base64 dari Blade
             $validated = $request->validate([
-                'foto_selfie' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:8192',
+                'photo' => 'required|string', 
                 'type' => 'required|in:masuk,pulang',
                 'latitude' => 'required|numeric',
                 'longitude' => 'required|numeric',
             ]);
 
-            // Handle uploaded selfie file
-            $uploaded = $request->file('foto_selfie');
+            // 2. Proses Konversi Base64 ke File Temp
+            $imageData = $request->photo;
+            $imageData = str_replace('data:image/jpeg;base64,', '', $imageData);
+            $imageData = str_replace(' ', '+', $imageData);
+            $imageBinary = base64_decode($imageData);
+
             $tmpDir = 'presensi/tmp';
-            $tmpFilename = 'temp_' . $pegawai->nip . '_' . uniqid() . '.' . $uploaded->getClientOriginalExtension();
-            // store temporarily on public disk
-            $tmpRelative = $uploaded->storeAs($tmpDir, $tmpFilename, 'public');
+            if (!Storage::disk('public')->exists($tmpDir)) {
+                Storage::disk('public')->makeDirectory($tmpDir);
+            }
+
+            $tmpFilename = 'temp_' . $pegawai->nip . '_' . uniqid() . '.jpg';
+            $tmpRelative = $tmpDir . '/' . $tmpFilename;
+            Storage::disk('public')->put($tmpRelative, $imageBinary);
             $tempPath = storage_path('app/public/' . $tmpRelative);
 
-            // Get source image path (original face reference)
+            // 3. Siapkan Path Foto Referensi (Foto Asli Pegawai)
             $sourceImagePath = storage_path('app/public/' . $pegawai->foto_wajah_asli);
 
-            // Call external API for face comparison
-            $response = \Illuminate\Support\Facades\Http::attach(
-                'source_image',
-                fopen($sourceImagePath, 'r'),
-                basename($sourceImagePath)
-            )->attach(
-                'target_image',
-                fopen($tempPath, 'r'),
-                basename($tempPath)
-            )->post('http://domain-anda.com/python-api/compare');
-
-            // Clean up temporary file after comparison (we'll re-save final file later)
-            // but only delete the tmp if exists
-            if (file_exists($tempPath)) {
-                @unlink($tempPath);
+            if (!file_exists($sourceImagePath)) {
+                return response()->json(['success' => false, 'message' => 'Foto referensi wajah asli tidak ditemukan.'], 422);
             }
 
-            if ($response->failed() || !$response->json('match')) {
-                return response()->json(['success' => false, 'message' => 'Wajah tidak cocok'], 422);
-            }
-
-            // Validate geofencing
+            // 4. Hitung Geofencing (Cek Jarak)
             $office = OfficeSetting::first();
             if ($office) {
                 $distance = $this->haversine($validated['latitude'], $validated['longitude'], $office->latitude, $office->longitude);
-                Log::info("Presensi attempt - User location: {$validated['latitude']}, {$validated['longitude']} | Office: {$office->latitude}, {$office->longitude} | Distance: {$distance}m | Radius: {$office->radius}m");
                 if ($distance > $office->radius) {
-                    return response()->json(['success' => false, 'message' => 'Anda berada di luar radius kantor'], 403);
+                    if (file_exists($tempPath)) @unlink($tempPath);
+                    return response()->json(['success' => false, 'message' => 'Di luar radius kantor (' . round($distance) . 'm)'], 403);
                 }
             }
 
-            $today = now()->toDateString();
+            // 5. Kirim ke Flask (Gunakan 'source_image' dan 'target_image' sesuai file Flask Anda)
+            // GANTI URL DI BAWAH INI SESUAI URL FLASK ANDA
+            $urlFlask = 'http://URL_API_FLASK_ANDA/compare'; 
+            
+            $response = Http::attach(
+                'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
+            )->attach(
+                'target_image', fopen($tempPath, 'r'), 'target.jpg'
+            )->post($urlFlask);
 
-            // Save final selfie file to presensi/ folder
-            $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
-            $finalRelative = 'presensi/' . $finalFilename;
+            $resData = $response->json();
 
-            // If original uploaded file is available, store it as final
-            if (isset($uploaded) && $uploaded->isValid()) {
-                // store the uploaded file content directly to final path on public disk
-                \Illuminate\Support\Facades\Storage::disk('public')->putFileAs('presensi', $uploaded, $finalFilename);
-            } else {
-                // fallback: if comparison returned binary, attempt to use response body (unlikely)
-                // create an empty placeholder
-                \Illuminate\Support\Facades\Storage::disk('public')->put($finalRelative, '');
+            // Cek jika Flask mengembalikan error (misal: wajah tidak terdeteksi)
+            if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
+                if (file_exists($tempPath)) @unlink($tempPath);
+                $msg = $resData['error'] ?? 'Wajah tidak cocok';
+                return response()->json(['success' => false, 'message' => $msg], 422);
             }
-            $path = $finalRelative;
 
-            // Prepare data
+            // 6. Simpan File Final dan Database
+            $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Ymd_His') . '.jpg';
+            $finalRelative = 'presensi/' . $finalFilename;
+            
+            Storage::disk('public')->move($tmpRelative, $finalRelative);
+
             $data = [
                 'nip' => $pegawai->nip,
-                'tanggal_presensi' => $today,
+                'tanggal_presensi' => now()->toDateString(),
                 'type' => $validated['type'],
                 'latitude' => $validated['latitude'],
                 'longitude' => $validated['longitude'],
@@ -139,48 +119,30 @@ class PresensiController extends Controller
 
             if ($validated['type'] === 'masuk') {
                 $data['jam_masuk'] = now()->format('H:i:s');
-                $data['foto_masuk'] = $path;
+                $data['foto_masuk'] = $finalRelative;
             } else {
                 $data['jam_pulang'] = now()->format('H:i:s');
-                $data['foto_pulang'] = $path;
+                $data['foto_pulang'] = $finalRelative;
             }
 
             Presensi::updateOrCreate(
-                [
-                    'nip' => $pegawai->nip,
-                    'tanggal_presensi' => $today,
-                    'type' => $validated['type'],
-                ],
+                ['nip' => $pegawai->nip, 'tanggal_presensi' => now()->toDateString(), 'type' => $validated['type']],
                 $data
             );
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Presensi ' . $validated['type'] . ' berhasil dicatat pada ' . now()->format('H:i:s')
-            ]);
+            return response()->json(['success' => true, 'message' => 'Presensi berhasil dicatat.']);
 
         } catch (\Exception $e) {
-            Log::error('Error storing presensi: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan saat menyimpan presensi.']);
+            Log::error('Presensi Error: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Kesalahan Sistem: ' . $e->getMessage()]);
         }
     }
 
-    /**
-     * Calculate distance between two coordinates using Haversine formula.
-     */
-    private function haversine($lat1, $lon1, $lat2, $lon2)
-    {
-        $earthRadius = 6371000; // Earth radius in meters
-
+    private function haversine($lat1, $lon1, $lat2, $lon2) {
+        $earthRadius = 6371000;
         $latDelta = deg2rad($lat2 - $lat1);
         $lonDelta = deg2rad($lon2 - $lon1);
-
-        $a = sin($latDelta / 2) * sin($latDelta / 2) +
-             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-             sin($lonDelta / 2) * sin($lonDelta / 2);
-
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-        return $earthRadius * $c;
+        $a = sin($latDelta / 2) * sin($latDelta / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lonDelta / 2) * sin($lonDelta / 2);
+        return $earthRadius * (2 * atan2(sqrt($a), sqrt(1 - $a)));
     }
 }

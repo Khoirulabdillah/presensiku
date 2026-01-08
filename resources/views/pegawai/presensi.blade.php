@@ -38,9 +38,6 @@
                     <div>
                         <p class="font-semibold text-green-800">Presensi Masuk</p>
                         <p class="text-sm text-green-600">{{ $presensiMasuk->jam_masuk }}</p>
-                        @if($presensiMasuk->foto_masuk)
-                        <p class="text-xs text-gray-500 mt-1">Foto tersimpan</p>
-                        @endif
                     </div>
                 </div>
             </div>
@@ -53,9 +50,6 @@
                     <div>
                         <p class="font-semibold text-blue-800">Presensi Pulang</p>
                         <p class="text-sm text-blue-600">{{ $presensiPulang->jam_pulang }}</p>
-                        @if($presensiPulang->foto_pulang)
-                        <p class="text-xs text-gray-500 mt-1">Foto tersimpan</p>
-                        @endif
                     </div>
                 </div>
             </div>
@@ -68,7 +62,6 @@
     <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
         <h3 class="text-lg font-semibold text-gray-800 mb-6 text-center">Presensi dengan Kamera</h3>
 
-        {{-- Camera Container --}}
         <div class="mb-6">
             <div class="relative bg-gray-100 rounded-lg overflow-hidden" style="height: 400px;">
                 <video id="camera" class="w-full h-full object-cover" autoplay playsinline muted></video>
@@ -78,52 +71,44 @@
                 {{-- Camera Controls --}}
                 <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4">
                     <button id="start-camera" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                        <i class="fas fa-play"></i>
-                        <span>Start Camera</span>
+                        <i class="fas fa-play"></i> <span>Mulai Kamera</span>
                     </button>
                     <button id="stop-camera" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hidden">
-                        <i class="fas fa-stop"></i>
-                        <span>Stop Camera</span>
+                        <i class="fas fa-stop"></i> <span>Matikan Kamera</span>
                     </button>
                 </div>
-                <div class="absolute top-4 left-4 bg-white/80 px-3 py-1 rounded-md text-sm flex items-center gap-3">
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" id="enable-detect" />
-                        <span>Deteksi Wajah</span>
-                    </label>
-                    <label class="flex items-center gap-2">
-                        <input type="checkbox" id="require-detect" />
-                        <span>Wajib Deteksi untuk Presensi</span>
-                    </label>
-                    <div id="face-status" class="ml-2 text-xs text-gray-700">Tidak Terdeteksi</div>
+
+                <div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-md text-sm shadow-sm flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="enable-detect" checked />
+                        <span class="font-medium">Deteksi Wajah</span>
+                    </div>
+                    <div id="face-status" class="text-xs font-bold text-gray-600">Status: Memuat AI...</div>
                 </div>
             </div>
         </div>
 
         {{-- Presensi Actions --}}
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <button id="presensi-masuk" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                <i class="fas fa-sign-in-alt"></i>
-                <span>Presensi Masuk</span>
+            <button id="presensi-masuk" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
+                <i class="fas fa-sign-in-alt"></i> <span>Presensi Masuk</span>
             </button>
 
-            <button id="presensi-pulang" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Presensi Pulang</span>
+            <button id="presensi-pulang" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
+                <i class="fas fa-sign-out-alt"></i> <span>Presensi Pulang</span>
             </button>
         </div>
 
-        {{-- Status Messages --}}
         <div id="status-message" class="mt-4 text-center hidden">
-            <p id="status-text" class="text-sm"></p>
+            <p id="status-text" class="text-sm font-medium"></p>
         </div>
     </div>
 </div>
 
-{{-- JavaScript for Camera Access and Real-time Face Detection --}}
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let video = document.getElementById('camera');
@@ -134,349 +119,149 @@ document.addEventListener('DOMContentLoaded', function() {
     let stopBtn = document.getElementById('stop-camera');
     let presensiMasukBtn = document.getElementById('presensi-masuk');
     let presensiPulangBtn = document.getElementById('presensi-pulang');
-    let statusMessage = document.getElementById('status-message');
-    let statusText = document.getElementById('status-text');
-    let enableDetectCheckbox = document.getElementById('enable-detect');
-    let requireDetectCheckbox = document.getElementById('require-detect');
     let faceStatus = document.getElementById('face-status');
+    let enableDetectCheckbox = document.getElementById('enable-detect');
+    
     let stream = null;
-
     let faceModel = null;
-    let detecting = false;
     let faceDetected = false;
+    let isDetecting = false;
 
-    // Update current time
-    function updateTime() {
+    // Timer
+    setInterval(() => {
         document.getElementById('current-time').textContent = new Date().toLocaleTimeString('id-ID');
+    }, 1000);
+
+    // Load AI Model
+    async function initAI() {
+        try {
+            faceModel = await blazeface.load();
+            faceStatus.textContent = 'Status: AI Siap';
+        } catch (e) {
+            faceStatus.textContent = 'Status: Gagal memuat AI';
+        }
     }
-    setInterval(updateTime, 1000);
+    initAI();
 
     function resizeOverlay() {
-        overlay.width = video.videoWidth || overlay.clientWidth;
-        overlay.height = video.videoHeight || overlay.clientHeight;
+        overlay.width = video.videoWidth;
+        overlay.height = video.videoHeight;
     }
 
-    async function loadFaceModel() {
-        if (!faceModel) {
-            try {
-                faceModel = await blazeface.load();
-                console.log('Blazeface model loaded');
-            } catch (err) {
-                console.error('Failed to load face model', err);
-            }
-        }
-    }
+    async function detectFrame() {
+        if (!isDetecting || !faceModel) return;
 
-    async function detectLoop() {
-        if (!detecting || !faceModel) {
-            overlayCtx.clearRect(0,0,overlay.width,overlay.height);
-            faceDetected = false;
-            updateFaceStatus();
-            return;
-        }
+        const predictions = await faceModel.estimateFaces(video, false);
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
 
-        try {
-            const predictions = await faceModel.estimateFaces(video, false);
-            overlayCtx.clearRect(0,0,overlay.width,overlay.height);
-
-            if (predictions && predictions.length > 0) {
-                faceDetected = true;
-                overlayCtx.strokeStyle = 'lime';
-                overlayCtx.lineWidth = Math.max(2, overlay.width / 200);
-                overlayCtx.fillStyle = 'rgba(0,255,0,0.12)';
-                predictions.forEach(pred => {
-                    const start = pred.topLeft;
-                    const end = pred.bottomRight;
-                    const x = start[0];
-                    const y = start[1];
-                    const w = end[0] - start[0];
-                    const h = end[1] - start[1];
-                    overlayCtx.fillRect(x, y, w, h);
-                    overlayCtx.strokeRect(x, y, w, h);
-                });
-            } else {
-                faceDetected = false;
-            }
-
-            updateFaceStatus();
-        } catch (err) {
-            console.error('Detection error', err);
-        }
-
-        requestAnimationFrame(detectLoop);
-    }
-
-    function updateFaceStatus() {
-        faceStatus.textContent = faceDetected ? 'Terdeteksi' : 'Tidak Terdeteksi';
-        faceStatus.style.color = faceDetected ? 'green' : '#374151';
-
-        if (requireDetectCheckbox.checked) {
-            presensiMasukBtn.disabled = !faceDetected || @if($presensiMasuk) true @else false @endif;
-            presensiPulangBtn.disabled = !faceDetected || @if($presensiPulang) true @else false @endif;
-        }
-    }
-
-    // Start camera
-    startBtn.addEventListener('click', async function() {
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
-                    facingMode: 'user'
-                },
-                audio: false
+        if (predictions.length > 0) {
+            faceDetected = true;
+            faceStatus.textContent = 'Status: Wajah Terdeteksi';
+            faceStatus.className = 'text-xs font-bold text-green-600';
+            
+            // Draw Box
+            predictions.forEach(pred => {
+                const start = pred.topLeft;
+                const end = pred.bottomRight;
+                const size = [end[0] - start[0], end[1] - start[1]];
+                overlayCtx.strokeStyle = "#10B981";
+                overlayCtx.lineWidth = 4;
+                overlayCtx.strokeRect(start[0], start[1], size[0], size[1]);
             });
 
+            // Aktifkan tombol jika belum absen
+            @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
+            @if(!$presensiPulang) presensiPulangBtn.disabled = false; @endif
+        } else {
+            faceDetected = false;
+            faceStatus.textContent = 'Status: Wajah Tidak Terlihat';
+            faceStatus.className = 'text-xs font-bold text-red-600';
+            presensiMasukBtn.disabled = true;
+            presensiPulangBtn.disabled = true;
+        }
+
+        if (isDetecting) requestAnimationFrame(detectFrame);
+    }
+
+    startBtn.addEventListener('click', async () => {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480, facingMode: 'user' }
+            });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
                 resizeOverlay();
+                isDetecting = true;
+                if (enableDetectCheckbox.checked) detectFrame();
             };
-
             startBtn.classList.add('hidden');
             stopBtn.classList.remove('hidden');
-
-            // Enable buttons only if not already presensi and not requiring detection
-            if (!requireDetectCheckbox.checked) {
-                @if(!$presensiMasuk)
-                presensiMasukBtn.disabled = false;
-                @endif
-
-                @if(!$presensiPulang)
-                presensiPulangBtn.disabled = false;
-                @endif
-            }
-
-            // If detection enabled, load model and start loop
-            if (enableDetectCheckbox.checked) {
-                await loadFaceModel();
-                detecting = true;
-                detectLoop();
-            }
-
-            showStatus('Kamera berhasil diaktifkan', 'success');
-        } catch (error) {
-            console.error('Error accessing camera:', error);
-            showStatus('Gagal mengakses kamera. Pastikan Anda memberikan izin akses kamera.', 'error');
+        } catch (e) {
+            alert('Gagal akses kamera: ' + e.message);
         }
     });
 
-    // Stop camera
-    stopBtn.addEventListener('click', function() {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            video.srcObject = null;
-            stream = null;
-        }
-
-        // stop detection
-        detecting = false;
-        overlayCtx.clearRect(0,0,overlay.width,overlay.height);
-
+    stopBtn.addEventListener('click', () => {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        isDetecting = false;
+        video.srcObject = null;
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
         startBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
-
-        // Disable buttons, but keep presensi buttons disabled if already done
-        presensiMasukBtn.disabled = @if($presensiMasuk) true @else false @endif;
-        presensiPulangBtn.disabled = @if($presensiPulang) true @else false @endif;
-
-        showStatus('Kamera dimatikan', 'info');
+        presensiMasukBtn.disabled = true;
+        presensiPulangBtn.disabled = true;
     });
 
-    // Toggle detection
-    enableDetectCheckbox.addEventListener('change', async function() {
-        if (enableDetectCheckbox.checked) {
-            await loadFaceModel();
-            if (stream) {
-                detecting = true;
-                detectLoop();
-            }
-        } else {
-            detecting = false;
-            overlayCtx.clearRect(0,0,overlay.width,overlay.height);
-            faceDetected = false;
-            updateFaceStatus();
-            if (!requireDetectCheckbox.checked && stream) {
-                @if(!$presensiMasuk)
-                presensiMasukBtn.disabled = false;
-                @endif
-                @if(!$presensiPulang)
-                presensiPulangBtn.disabled = false;
-                @endif
-            }
-        }
-    });
-
-    requireDetectCheckbox.addEventListener('change', function() {
-        // If requiring detection and no face currently detected, disable presensi until detected
-        if (requireDetectCheckbox.checked && !faceDetected) {
-            presensiMasukBtn.disabled = true;
-            presensiPulangBtn.disabled = true;
-        } else if (!requireDetectCheckbox.checked && stream) {
-            @if(!$presensiMasuk)
-            presensiMasukBtn.disabled = false;
-            @endif
-            @if(!$presensiPulang)
-            presensiPulangBtn.disabled = false;
-            @endif
-        }
-    });
-
-    // Capture and send presensi
-    async function capturePresensi(type) {
-        if (!stream) {
-            showStatus('Kamera belum diaktifkan', 'error');
+    async function captureAndSend(type) {
+        if (!faceDetected) {
+            alert('Wajah harus terdeteksi di dalam kotak!');
             return;
         }
 
-        if (requireDetectCheckbox.checked && !faceDetected) {
-            showStatus('Wajah belum terdeteksi. Pastikan wajah terlihat jelas.', 'error');
-            return;
-        }
+        // Tampilkan Loading
+        faceStatus.textContent = 'Status: Memproses Presensi...';
+        presensiMasukBtn.disabled = true;
+        presensiPulangBtn.disabled = true;
 
-        try {
-            // Set canvas size to video size
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
+        // Resize & Capture (Kecilkan ke 480px agar Flask tidak berat)
+        canvas.width = 480;
+        canvas.height = (video.videoHeight / video.videoWidth) * 480;
+        let ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        let photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-            // Draw current video frame to canvas
-            let ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Get Location
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+            try {
+                const response = await axios.post('/pegawai/presensi', {
+                    photo: photoBase64,
+                    type: type,
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude
+                }, {
+                    headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
+                });
 
-            // Convert to base64
-            let imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-            // Get location
-            let latitude = null;
-            let longitude = null;
-
-            if (navigator.geolocation) {
-                try {
-                    let position = await getCurrentPosition();
-                    latitude = position.coords.latitude;
-                    longitude = position.coords.longitude;
-                } catch (error) {
-                    console.log('Location not available:', error);
-                    showStatus('Gagal mendapatkan lokasi. Pastikan Anda memberikan izin akses lokasi.', 'error');
-                    return;
+                if (response.data.success) {
+                    alert(response.data.message);
+                    location.reload();
+                } else {
+                    alert('Gagal: ' + response.data.message);
                 }
-            } else {
-                showStatus('Geolokasi tidak didukung oleh browser ini.', 'error');
-                return;
+            } catch (err) {
+                alert('Error: ' + (err.response?.data?.message || 'Terjadi kesalahan sistem'));
+            } finally {
+                faceStatus.textContent = 'Status: Selesai';
             }
-
-            // Send presensi
-            await kirimAbsen(type, imageData, latitude, longitude);
-
-        } catch (error) {
-            console.error('Error capturing presensi:', error);
-            showStatus('Terjadi kesalahan saat mengambil foto', 'error');
-        }
-    }
-
-    // Function to send presensi
-    async function kirimAbsen(type, photo, latitude, longitude) {
-        try {
-            const response = await axios.post('/pegawai/presensi', {
-                photo: photo,
-                type: type,
-                latitude: latitude,
-                longitude: longitude
-            }, {
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                }
-            });
-
-            if (response.data.success) {
-                alert('Presensi berhasil: ' + response.data.message);
-                // Reload page after 2 seconds to show updated status
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
-            } else {
-                alert('Gagal: ' + response.data.message);
-            }
-        } catch (error) {
-            console.error('Error sending presensi:', error);
-            if (error.response && error.response.data && error.response.data.message) {
-                alert('Error: ' + error.response.data.message);
-            } else {
-                alert('Terjadi kesalahan saat mengirim presensi');
-            }
-        }
-    }
-
-    // Get current position promise
-    function getCurrentPosition() {
-        return new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            });
+        }, (err) => {
+            alert('Gagal mendapatkan lokasi. Harap aktifkan GPS Anda.');
         });
     }
 
-    // Event listeners for presensi buttons
-    presensiMasukBtn.addEventListener('click', () => capturePresensi('masuk'));
-    presensiPulangBtn.addEventListener('click', () => capturePresensi('pulang'));
-
-    // Show status message
-    function showStatus(message, type) {
-        statusText.textContent = message;
-        statusMessage.classList.remove('hidden');
-
-        // Remove existing classes
-        statusMessage.classList.remove('text-green-600', 'text-red-600', 'text-blue-600');
-
-        // Add appropriate class
-        if (type === 'success') {
-            statusMessage.classList.add('text-green-600');
-        } else if (type === 'error') {
-            statusMessage.classList.add('text-red-600');
-        } else {
-            statusMessage.classList.add('text-blue-600');
-        }
-
-        // Hide after 5 seconds
-        setTimeout(() => {
-            statusMessage.classList.add('hidden');
-        }, 5000);
-    }
-
-    // Initialize - disable buttons initially
-    presensiMasukBtn.disabled = true;
-    presensiPulangBtn.disabled = true;
-
-    // Check if presensi already done today
-    @if($presensiMasuk)
-    presensiMasukBtn.disabled = true;
-    presensiMasukBtn.textContent = 'Sudah Presensi Masuk';
-    presensiMasukBtn.classList.add('opacity-50', 'cursor-not-allowed');
-    @endif
-
-    @if($presensiPulang)
-    presensiPulangBtn.disabled = true;
-    presensiPulangBtn.textContent = 'Sudah Presensi Pulang';
-    presensiPulangBtn.classList.add('opacity-50', 'cursor-not-allowed');
-    @endif
-
-    // Resize overlay on window resize
-    window.addEventListener('resize', () => {
-        if (video && video.videoWidth) resizeOverlay();
-    });
+    presensiMasukBtn.addEventListener('click', () => captureAndSend('masuk'));
+    presensiPulangBtn.addEventListener('click', () => captureAndSend('pulang'));
 });
 
-// Function to go back to previous page
-function goBack() {
-    if (window.history.length > 1) {
-        window.history.back();
-    } else {
-        // Fallback to home page if no history
-        window.location.href = '{{ route("pegawai.home") }}';
-    }
-}
+function goBack() { window.history.back(); }
 </script>
-
 @endsection
