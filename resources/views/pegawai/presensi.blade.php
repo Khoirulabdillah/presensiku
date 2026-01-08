@@ -41,7 +41,12 @@
                         @if(!empty($presensiMasuk->foto_masuk))
                             @php
                                 $pPath = $presensiMasuk->foto_masuk;
-                                $pUrl = Storage::disk('public')->exists($pPath) ? asset('storage/' . $pPath) : route('storage.image', ['path' => $pPath]);
+                                $publicCandidate = public_path('storage/' . $pPath);
+                                if (Storage::disk('public')->exists($pPath) && file_exists($publicCandidate)) {
+                                    $pUrl = asset('storage/' . $pPath);
+                                } else {
+                                    $pUrl = route('storage.image', ['path' => $pPath]);
+                                }
                             @endphp
                             <div class="mt-3">
                                 <img src="{{ $pUrl }}" alt="Foto Masuk" class="h-24 w-24 object-cover rounded-md border">
@@ -62,7 +67,12 @@
                         @if(!empty($presensiPulang->foto_pulang))
                             @php
                                 $ppPath = $presensiPulang->foto_pulang;
-                                $ppUrl = Storage::disk('public')->exists($ppPath) ? asset('storage/' . $ppPath) : route('storage.image', ['path' => $ppPath]);
+                                $publicCandidate = public_path('storage/' . $ppPath);
+                                if (Storage::disk('public')->exists($ppPath) && file_exists($publicCandidate)) {
+                                    $ppUrl = asset('storage/' . $ppPath);
+                                } else {
+                                    $ppUrl = route('storage.image', ['path' => $ppPath]);
+                                }
                             @endphp
                             <div class="mt-3">
                                 <img src="{{ $ppUrl }}" alt="Foto Pulang" class="h-24 w-24 object-cover rounded-md border">

@@ -90,6 +90,9 @@ Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'inde
 // Serve storage images when public/storage symlink is not available
 Route::get('/storage/image/{path}', [StorageController::class, 'image'])->where('path', '.*')->name('storage.image');
 
+// Diagnostics: storage status (useful on shared hosting)
+Route::get('/storage/status', [StorageController::class, 'status'])->name('storage.status');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

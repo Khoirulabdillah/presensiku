@@ -1,0 +1,57 @@
+name: Build and publish frontend build branch
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-push-build-branch:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build frontend
+      run: npm run build
+
+    - name: Publish build to `build` branch
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # Create or update the build branch with the current tree plus built files
+        git fetch origin build || true
+        # Create local branch 'build' based on origin/build if exists, otherwise create from current
+        if git show-ref --verify --quiet refs/remotes/origin/build; then
+          git checkout -B build origin/build
+        else
+          git checkout -B build
+        fi
+
+        # Add built assets (force in case .gitignore ignores them)
+        git add -f public/build || true
+
+        # If nothing changed, exit
+        if git diff --staged --quiet; then
+          echo "No build changes to commit"
+          exit 0
+        fi
+
+        git commit -m "chore(build): update frontend build [skip ci]"
+        git push --force origin build

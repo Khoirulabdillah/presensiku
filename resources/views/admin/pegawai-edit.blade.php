@@ -81,11 +81,14 @@
                             $photoPath = $pegawai->foto_wajah_asli;
                             $showUrl = null;
                         @endphp
-                        @if(\Illuminate\Support\Facades\Storage::disk('public')->exists($photoPath))
-                            @php $showUrl = asset('storage/' . $photoPath); @endphp
-                        @else
-                            @php $showUrl = route('storage.image', ['path' => $photoPath]); @endphp
-                        @endif
+                        @php
+                            $publicCandidate = public_path('storage/' . $photoPath);
+                            if (\Illuminate\Support\Facades\Storage::disk('public')->exists($photoPath) && file_exists($publicCandidate)) {
+                                $showUrl = asset('storage/' . $photoPath);
+                            } else {
+                                $showUrl = route('storage.image', ['path' => $photoPath]);
+                            }
+                        @endphp
 
                         <img src="{{ $showUrl }}" alt="Foto Wajah" class="h-20 w-20 object-cover rounded-md border">
                     </div>
