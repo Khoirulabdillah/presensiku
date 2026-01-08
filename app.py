@@ -19,6 +19,42 @@ def _first_face_encoding(image, model='hog', num_jitters=0):
     best_idx = areas[0][1]
     best_location = locations[best_idx]
 
+    # Try to align face using landmarks if Pillow is available
+    try:
+        from PIL import Image, ImageOps
+        pil_available = True
+    except Exception:
+        pil_available = False
+
+    if pil_available:
+        try:
+            # attempt to get landmarks for the chosen face
+            landmarks_list = face_recognition.face_landmarks(image, [best_location])
+            if landmarks_list:
+                # convert to PIL for processing
+                pil = Image.fromarray(image)
+                lm = landmarks_list[0]
+                if 'left_eye' in lm and 'right_eye' in lm:
+                    left = np.mean(lm['left_eye'], axis=0)
+                    right = np.mean(lm['right_eye'], axis=0)
+                    dy = right[1] - left[1]
+                    dx = right[0] - left[0]
+                    angle = np.degrees(np.arctan2(dy, dx))
+                    # rotate to align eyes horizontally
+                    pil = pil.rotate(-angle, resample=Image.BICUBIC, expand=True)
+                    # equalize to reduce lighting differences
+                    try:
+                        pil = ImageOps.equalize(pil)
+                    except Exception:
+                        pass
+                    rotated = np.array(pil)
+                    encodings = face_recognition.face_encodings(rotated, num_jitters=num_jitters)
+                    if encodings:
+                        return encodings[0], best_location
+        except Exception:
+            # fallback to original encoding path
+            pass
+
     encodings = face_recognition.face_encodings(image, known_face_locations=[best_location], num_jitters=num_jitters)
     if not encodings:
         return None, best_location

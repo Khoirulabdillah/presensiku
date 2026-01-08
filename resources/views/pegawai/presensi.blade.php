@@ -152,8 +152,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initAI();
 
     function resizeOverlay() {
-        overlay.width = video.videoWidth;
-        overlay.height = video.videoHeight;
+        overlay.width = video.videoWidth || video.clientWidth || 640;
+        overlay.height = video.videoHeight || video.clientHeight || 480;
     }
 
     async function detectFrame() {
@@ -197,7 +197,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 video: { width: 640, height: 480, facingMode: 'user' }
             });
             video.srcObject = stream;
-            video.onloadedmetadata = () => {
+            video.onloadedmetadata = async () => {
+                try { await video.play(); } catch(e) { console.warn('video.play failed', e); }
                 resizeOverlay();
                 isDetecting = true;
                 if (enableDetectCheckbox.checked) detectFrame();
@@ -207,6 +208,11 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {
             alert('Gagal akses kamera: ' + e.message);
         }
+    });
+
+    // Ensure overlay resizes on window resize
+    window.addEventListener('resize', () => {
+        if (video.srcObject) resizeOverlay();
     });
 
     stopBtn.addEventListener('click', () => {
