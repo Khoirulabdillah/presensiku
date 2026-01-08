@@ -1,8 +1,30 @@
 from flask import Flask, request, jsonify
 import face_recognition
 import numpy as np
+import logging
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
+def _first_face_encoding(image, model='hog', num_jitters=0):
+    # detect face locations and choose the largest face (by area)
+    locations = face_recognition.face_locations(image, model=model)
+    if not locations:
+        return None, None
+
+    # choose largest face
+    areas = [ (abs((top-bottom)*(right-left)), idx) for idx, (top, right, bottom, left) in enumerate(locations) ]
+    areas.sort(reverse=True)
+    best_idx = areas[0][1]
+    best_location = locations[best_idx]
+
+    encodings = face_recognition.face_encodings(image, known_face_locations=[best_location], num_jitters=num_jitters)
+    if not encodings:
+        return None, best_location
+
+    return encodings[0], best_location
+
 
 @app.route('/compare', methods=['POST'])
 def compare_faces():
@@ -12,57 +34,63 @@ def compare_faces():
     source_file = request.files['source_image']
     target_file = request.files['target_image']
 
+    # parameters
+    tolerance = float(request.form.get('tolerance', 0.5))
+    model = request.form.get('model', 'hog')  # 'hog' or 'cnn'
+    num_jitters = int(request.form.get('num_jitters', 0))
+
     try:
         source_img = face_recognition.load_image_file(source_file)
         target_img = face_recognition.load_image_file(target_file)
 
-        source_encodings = face_recognition.face_encodings(source_img)
-        if not source_encodings:
+        src_enc, src_loc = _first_face_encoding(source_img, model=model, num_jitters=num_jitters)
+        if src_enc is None:
             return jsonify({'error': 'No face detected in source_image.'}), 400
 
-        # try to get encoding from target image (original)
-        target_encodings = face_recognition.face_encodings(target_img)
+        # target original
+        tgt_enc, tgt_loc = _first_face_encoding(target_img, model=model, num_jitters=num_jitters)
 
-        # also compute encoding from horizontally flipped target (mirror)
+        # target flipped (mirror)
         flipped_img = np.fliplr(target_img)
-        flipped_encodings = face_recognition.face_encodings(flipped_img)
+        flip_enc, flip_loc = _first_face_encoding(flipped_img, model=model, num_jitters=num_jitters)
 
-        if not target_encodings and not flipped_encodings:
+        if tgt_enc is None and flip_enc is None:
             return jsonify({'error': 'No face detected in target_image (original or flipped).'}), 400
 
-        source_enc = source_encodings[0]
+        results = []
 
-        # pick first encoding if multiple faces present
-        target_enc = target_encodings[0] if target_encodings else None
-        flip_enc = flipped_encodings[0] if flipped_encodings else None
-
-        # compute distances (euclidean); smaller is better
-        best = {
-            'which': None,
-            'distance': None,
-            'matched': False,
-        }
-
-        tolerance = float(request.form.get('tolerance', 0.5))
-
-        if target_enc is not None:
-            dist = face_recognition.face_distance([source_enc], target_enc)[0]
-            best.update({'which': 'original', 'distance': float(dist), 'matched': dist <= tolerance})
+        if tgt_enc is not None:
+            dist = float(face_recognition.face_distance([src_enc], tgt_enc)[0])
+            results.append({'which': 'original', 'distance': dist, 'matched': dist <= tolerance, 'location': tgt_loc})
 
         if flip_enc is not None:
-            distf = face_recognition.face_distance([source_enc], flip_enc)[0]
-            # if we don't have a best yet, or flipped is better (smaller distance), prefer it
-            if best['distance'] is None or float(distf) < float(best['distance']):
-                best.update({'which': 'flipped', 'distance': float(distf), 'matched': float(distf) <= tolerance})
+            distf = float(face_recognition.face_distance([src_enc], flip_enc)[0])
+            results.append({'which': 'flipped', 'distance': distf, 'matched': distf <= tolerance, 'location': flip_loc})
 
-        return jsonify({
+        # pick best (smallest distance)
+        best = min(results, key=lambda r: r['distance'])
+
+        resp = {
             'match': bool(best['matched']),
             'which': best['which'],
             'distance': best['distance'],
-            'detected_mirror': (best['which'] == 'flipped')
-        })
+            'tolerance': tolerance,
+            'detected_mirror': (best['which'] == 'flipped'),
+            'debug': {
+                'source_location': src_loc,
+                'results': results,
+                'model': model,
+                'num_jitters': num_jitters,
+            }
+        }
+
+        logging.info('Compare result: %s', resp)
+
+        return jsonify(resp)
     except Exception as e:
+        logging.exception('Compare error')
         return jsonify({'error': str(e)}), 400
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

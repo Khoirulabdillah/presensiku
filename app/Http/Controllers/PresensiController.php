@@ -92,15 +92,23 @@ class PresensiController extends Controller
                 'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
             )->attach(
                 'target_image', fopen($tempPath, 'r'), 'target.jpg'
-            )->post($urlFlask);
+            )->post($urlFlask, [
+                // tune these if necessary. num_jitters helps encoding stability but costs CPU
+                'tolerance' => 0.55,
+                'num_jitters' => 1,
+                'model' => 'hog',
+            ]);
 
             $resData = $response->json();
 
-            // Log respons Flask untuk diagnosa jika gagal
+            // Log respons Flask untuk diagnosa
             if ($response->failed()) {
                 Log::error('Flask compare failed', ['status' => $response->status(), 'body' => $response->body()]);
             } else {
                 Log::info('Flask compare response', ['status' => $response->status(), 'body' => $response->body()]);
+                if (is_array($resData) && isset($resData['debug'])) {
+                    Log::debug('Flask debug', ['debug' => $resData['debug']]);
+                }
             }
 
             // Cek jika Flask mengembalikan error (misal: wajah tidak terdeteksi)
