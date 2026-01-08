@@ -16,7 +16,13 @@ class CheckRole
     public function handle(Request $request, Closure $next, string $role): Response
     {
         if (!auth()->check() || auth()->user()->role !== $role) {
-            abort(403, 'Unauthorized');
+            // If request expects JSON (API/AJAX), keep returning 403
+            if ($request->expectsJson() || $request->isXmlHttpRequest()) {
+                abort(403, 'Unauthorized');
+            }
+
+            // For normal web requests, redirect back to home with an error message
+            return redirect('/')->withErrors(['error' => 'Anda tidak memiliki akses ke halaman yang diminta.']);
         }
 
         return $next($request);

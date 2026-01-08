@@ -40,13 +40,23 @@ class AdminController extends Controller
      */
     public function updateOfficeSettings(Request $request)
     {
-        $validated = $request->validate([
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'radius' => 'required|integer|min:1',
-            'jam_masuk' => 'required|date_format:H:i',
-            'jam_pulang' => 'required|date_format:H:i',
-        ]);
+        // Normalize decimal separators (allow users to enter comma as decimal separator)
+        $input = $request->all();
+        if (isset($input['latitude'])) {
+            $input['latitude'] = str_replace(',', '.', (string) $input['latitude']);
+        }
+        if (isset($input['longitude'])) {
+            $input['longitude'] = str_replace(',', '.', (string) $input['longitude']);
+        }
+
+        // Validate after normalization
+        $validated = validator($input, [
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+            'radius' => ['required', 'integer', 'min:1'],
+            'jam_masuk' => ['required', 'date_format:H:i'],
+            'jam_pulang' => ['required', 'date_format:H:i'],
+        ])->validate();
 
         $officeSetting = OfficeSetting::first();
         if ($officeSetting) {

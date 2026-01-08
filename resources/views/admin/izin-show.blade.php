@@ -153,15 +153,34 @@
 
                 <!-- Action Buttons -->
                 <div class="flex justify-end space-x-4">
-                    <a href="{{ route('admin.izin.edit', $izin->id) }}"
-                       class="bg-yellow-600 text-white px-6 py-2 rounded-lg hover:bg-yellow-700 transition duration-200">
-                        <i class="fas fa-edit mr-2"></i>Edit Status
-                    </a>
+                    {{-- Quick Approve --}}
+                    <form action="{{ route('admin.izin.update', $izin->id) }}" method="POST" class="inline">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="status_izin" value="approved" />
+                        <input type="hidden" name="catatan_admin" value="" />
+                        <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition duration-200"
+                                onclick="return confirm('Setujui permohonan izin ini?')">
+                            <i class="fas fa-check mr-2"></i>Approve
+                        </button>
+                    </form>
+
+                    {{-- Quick Reject (asks for note) --}}
+                    <form action="{{ route('admin.izin.update', $izin->id) }}" method="POST" class="inline reject-form">
+                        @csrf
+                        @method('PUT')
+                        <input type="hidden" name="status_izin" value="rejected" />
+                        <input type="hidden" name="catatan_admin" value="" class="catatan-input" />
+                        <button type="button" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition duration-200 reject-btn">
+                            <i class="fas fa-times mr-2"></i>Reject
+                        </button>
+                    </form>
+
                     <form action="{{ route('admin.izin.destroy', $izin->id) }}" method="POST" class="inline"
                           onsubmit="return confirm('Apakah Anda yakin ingin menghapus permohonan izin ini?')">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition duration-200">
+                        <button type="submit" class="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition duration-200">
                             <i class="fas fa-trash mr-2"></i>Hapus
                         </button>
                     </form>
@@ -172,4 +191,21 @@
     </div>
 </div>
 
-@endsection
+            <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                document.querySelectorAll('.reject-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        const form = btn.closest('.reject-form');
+                        let note = prompt('Masukkan catatan atau alasan penolakan (opsional):');
+                        if (note === null) return; // cancel
+                        const input = form.querySelector('.catatan-input');
+                        if (input) input.value = note;
+                        if (confirm('Konfirmasi: tolak permohonan ini?')) {
+                            form.submit();
+                        }
+                    });
+                });
+            });
+            </script>
+
+            @endsection

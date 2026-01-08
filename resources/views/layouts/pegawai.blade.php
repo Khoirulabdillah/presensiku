@@ -20,7 +20,7 @@
       </div>
       <div>
         <h2 class="font-semibold text-lg">{{ Auth::user()->name }}</h2>
-        <p class="text-sm opacity-90">{{ Auth::user()->employee_id ?? '3003872632' }}</p>
+        <div class="text-sm">Pegawai</div>
       </div>
     </div>
   </div>

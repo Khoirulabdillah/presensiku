@@ -18,7 +18,8 @@ class Pegawai extends Model
         'users_id',
         'nip',
         'nama_pegawai',
-        'jabatan'
+        'jabatan',
+        'foto_wajah_asli',
     ];
     public function divisi()
     {

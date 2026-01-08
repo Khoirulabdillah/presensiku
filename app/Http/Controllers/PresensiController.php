@@ -57,18 +57,55 @@ class PresensiController extends Controller
                 return response()->json(['success' => false, 'message' => 'Data pegawai tidak ditemukan.']);
             }
 
+            // Validate that pegawai has original face photo
+            if (!$pegawai->foto_wajah_asli) {
+                return response()->json(['success' => false, 'message' => 'Foto wajah asli tidak ditemukan di profil Anda.'], 422);
+            }
+
             $validated = $request->validate([
-                'photo' => 'required|string', // base64 image
+                'foto_selfie' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:8192',
                 'type' => 'required|in:masuk,pulang',
                 'latitude' => 'required|numeric',
                 'longitude' => 'required|numeric',
             ]);
 
-            // Ambil titik koordinat kantor
+            // Handle uploaded selfie file
+            $uploaded = $request->file('foto_selfie');
+            $tmpDir = 'presensi/tmp';
+            $tmpFilename = 'temp_' . $pegawai->nip . '_' . uniqid() . '.' . $uploaded->getClientOriginalExtension();
+            // store temporarily on public disk
+            $tmpRelative = $uploaded->storeAs($tmpDir, $tmpFilename, 'public');
+            $tempPath = storage_path('app/public/' . $tmpRelative);
+
+            // Get source image path (original face reference)
+            $sourceImagePath = storage_path('app/public/' . $pegawai->foto_wajah_asli);
+
+            // Call external API for face comparison
+            $response = \Illuminate\Support\Facades\Http::attach(
+                'source_image',
+                fopen($sourceImagePath, 'r'),
+                basename($sourceImagePath)
+            )->attach(
+                'target_image',
+                fopen($tempPath, 'r'),
+                basename($tempPath)
+            )->post('http://domain-anda.com/python-api/compare');
+
+            // Clean up temporary file after comparison (we'll re-save final file later)
+            // but only delete the tmp if exists
+            if (file_exists($tempPath)) {
+                @unlink($tempPath);
+            }
+
+            if ($response->failed() || !$response->json('match')) {
+                return response()->json(['success' => false, 'message' => 'Wajah tidak cocok'], 422);
+            }
+
+            // Validate geofencing
             $office = OfficeSetting::first();
             if ($office) {
                 $distance = $this->haversine($validated['latitude'], $validated['longitude'], $office->latitude, $office->longitude);
-                \Log::info("Presensi attempt - User location: {$validated['latitude']}, {$validated['longitude']} | Office: {$office->latitude}, {$office->longitude} | Distance: {$distance}m | Radius: {$office->radius}m");
+                Log::info("Presensi attempt - User location: {$validated['latitude']}, {$validated['longitude']} | Office: {$office->latitude}, {$office->longitude} | Distance: {$distance}m | Radius: {$office->radius}m");
                 if ($distance > $office->radius) {
                     return response()->json(['success' => false, 'message' => 'Anda berada di luar radius kantor'], 403);
                 }
@@ -76,21 +113,22 @@ class PresensiController extends Controller
 
             $today = now()->toDateString();
 
-            // Decode base64 image
-            $imageData = $validated['photo'];
-            $imageData = str_replace('data:image/jpeg;base64,', '', $imageData);
-            $imageData = str_replace('data:image/png;base64,', '', $imageData);
-            $imageData = str_replace(' ', '+', $imageData);
-            $imageData = base64_decode($imageData);
+            // Save final selfie file to presensi/ folder
+            $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
+            $finalRelative = 'presensi/' . $finalFilename;
 
-            // Generate filename
-            $filename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Y-m-d_H-i-s') . '.jpg';
-            $path = 'presensi/' . $filename;
+            // If original uploaded file is available, store it as final
+            if (isset($uploaded) && $uploaded->isValid()) {
+                // store the uploaded file content directly to final path on public disk
+                \Illuminate\Support\Facades\Storage::disk('public')->putFileAs('presensi', $uploaded, $finalFilename);
+            } else {
+                // fallback: if comparison returned binary, attempt to use response body (unlikely)
+                // create an empty placeholder
+                \Illuminate\Support\Facades\Storage::disk('public')->put($finalRelative, '');
+            }
+            $path = $finalRelative;
 
-            // Save image
-            Storage::disk('public')->put($path, $imageData);
-
-            // Prepare data for updateOrCreate
+            // Prepare data
             $data = [
                 'nip' => $pegawai->nip,
                 'tanggal_presensi' => $today,
@@ -107,7 +145,6 @@ class PresensiController extends Controller
                 $data['foto_pulang'] = $path;
             }
 
-            // Update or create presensi record
             Presensi::updateOrCreate(
                 [
                     'nip' => $pegawai->nip,
@@ -116,11 +153,6 @@ class PresensiController extends Controller
                 ],
                 $data
             );
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Presensi ' . $validated['type'] . ' berhasil dicatat pada ' . now()->format('H:i:s')
-            ]);
 
             return response()->json([
                 'success' => true,

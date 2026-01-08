@@ -7,6 +7,7 @@ use App\Models\Pegawai;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 
 class IzinController extends Controller
 {
@@ -245,7 +246,16 @@ class IzinController extends Controller
             'catatan_admin' => 'nullable|string|max:1000',
         ]);
 
-        $izin->update($validated);
+        // Prepare update data and only include `catatan_admin` if the column exists
+        $updateData = [
+            'status_izin' => $validated['status_izin'],
+        ];
+
+        if (Schema::hasColumn((new Izin)->getTable(), 'catatan_admin')) {
+            $updateData['catatan_admin'] = $validated['catatan_admin'] ?? null;
+        }
+
+        $izin->update($updateData);
 
         return redirect()->route('admin.izin.index')->with('success', 'Status izin berhasil diperbarui.');
     }

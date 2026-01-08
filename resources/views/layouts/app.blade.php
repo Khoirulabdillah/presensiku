@@ -17,7 +17,9 @@
 </head>
 <body class="font-poppins bg-gradient-to-br from-blue-100 via-white to-blue-50 min-h-screen">
     <div class="flex min-h-screen">
-        @include('layouts.admin_sidebar')
+        @if(auth()->check() && auth()->user()->role === 'admin')
+            @include('layouts.admin_sidebar')
+        @endif
 
         <!-- Main Content -->
         <div class="flex-1 p-10 overflow-auto backdrop-blur-sm">

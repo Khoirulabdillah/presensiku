@@ -25,7 +25,7 @@
             </div>
         @endif
         
-        <form action="{{ route('admin.pegawai.update', $pegawai->nip) }}" method="POST" class="space-y-6">
+        <form action="{{ route('admin.pegawai.update', $pegawai->nip) }}" method="POST" enctype="multipart/form-data" class="space-y-6">
             @csrf
             @method('PUT')
 
@@ -68,6 +68,21 @@
                     @endforeach
                 </select>
                 @error('divisi_id')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <!-- FOTO WAJAH REFERENSI -->
+            <div>
+                <label for="foto_wajah_asli" class="block text-sm font-medium text-gray-700 mb-1">Foto Wajah Referensi (opsional)</label>
+                @if(!empty($pegawai->foto_wajah_asli))
+                    <div class="mb-2">
+                        <img src="{{ asset('storage/' . $pegawai->foto_wajah_asli) }}" alt="Foto Wajah" class="h-20 w-20 object-cover rounded-md border">
+                    </div>
+                @endif
+                <input type="file" name="foto_wajah_asli" id="foto_wajah_asli" accept="image/*"
+                       class="w-full p-2 border border-gray-300 rounded-lg @error('foto_wajah_asli') border-red-500 @enderror">
+                @error('foto_wajah_asli')
                     <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                 @enderror
             </div>

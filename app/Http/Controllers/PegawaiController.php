@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class PegawaiController extends Controller
 {
@@ -89,6 +90,7 @@ class PegawaiController extends Controller
             'nama_pegawai' => 'required|string|max:100',
             'jabatan' => 'required|string|max:50',
             'divisi_id' => 'required|exists:divisi,id',
+            'foto_wajah_asli' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
         ]);
 
         $user = User::create([
@@ -104,7 +106,13 @@ class PegawaiController extends Controller
             'nip' => $validated['nip'],
             'nama_pegawai' => $validated['nama_pegawai'],
             'jabatan' => $validated['jabatan'],
+            'foto_wajah_asli' => null,
         ]);
+
+        if ($request->hasFile('foto_wajah_asli')) {
+            $path = $request->file('foto_wajah_asli')->store('pegawai', 'public');
+            $pegawai->update(['foto_wajah_asli' => $path]);
+        }
 
         return redirect()->route('admin.pegawai.index')->with('success', 'Pegawai berhasil ditambahkan.');
     }
@@ -133,6 +141,7 @@ class PegawaiController extends Controller
             'jabatan' => 'required|string|max:50',
             'divisi_id' => 'required|exists:divisi,id',
             'password' => 'nullable|confirmed|min:6',
+            'foto_wajah_asli' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
         ]);
 
         // Update password if provided
@@ -147,21 +156,45 @@ class PegawaiController extends Controller
         if ($validated['nip'] !== $pegawai->nip) {
             // create new record with new primary key and delete old one
             $oldUsersId = $pegawai->users_id;
+            $oldFoto = $pegawai->foto_wajah_asli;
             $pegawai->delete();
 
-            Pegawai::create([
+            $newData = [
                 'divisi_id' => $validated['divisi_id'],
                 'users_id' => $oldUsersId,
                 'nip' => $validated['nip'],
                 'nama_pegawai' => $validated['nama_pegawai'],
                 'jabatan' => $validated['jabatan'],
-            ]);
+                'foto_wajah_asli' => null,
+            ];
+
+            if ($request->hasFile('foto_wajah_asli')) {
+                $path = $request->file('foto_wajah_asli')->store('pegawai', 'public');
+                $newData['foto_wajah_asli'] = $path;
+                if (!empty($oldFoto)) {
+                    Storage::disk('public')->delete($oldFoto);
+                }
+            } else {
+                $newData['foto_wajah_asli'] = $oldFoto;
+            }
+
+            Pegawai::create($newData);
         } else {
-            $pegawai->update([
+            $updateData = [
                 'divisi_id' => $validated['divisi_id'],
                 'nama_pegawai' => $validated['nama_pegawai'],
                 'jabatan' => $validated['jabatan'],
-            ]);
+            ];
+
+            if ($request->hasFile('foto_wajah_asli')) {
+                $path = $request->file('foto_wajah_asli')->store('pegawai', 'public');
+                if (!empty($pegawai->foto_wajah_asli)) {
+                    Storage::disk('public')->delete($pegawai->foto_wajah_asli);
+                }
+                $updateData['foto_wajah_asli'] = $path;
+            }
+
+            $pegawai->update($updateData);
         }
 
         return redirect()->route('admin.pegawai.index')->with('success', 'Pegawai berhasil diperbarui.');

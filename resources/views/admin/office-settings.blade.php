@@ -98,10 +98,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize map
     const map = L.map('map').setView([{{ $officeSetting->latitude ?? -7.7956 }}, {{ $officeSetting->longitude ?? 110.3695 }}], 15);
 
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    // Add OpenStreetMap tiles (with tileerror handler and retina support)
+    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+        detectRetina: true,
+        subdomains: ['a','b','c']
+    });
+
+    tiles.addTo(map);
+
+    // Log tile loading errors to help diagnose missing tiles
+    tiles.on('tileerror', function(error) {
+        console.warn('Leaflet tile error:', error);
+    });
 
     // Add marker
     const marker = L.marker([{{ $officeSetting->latitude ?? -7.7956 }}, {{ $officeSetting->longitude ?? 110.3695 }}], {
@@ -111,8 +121,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update inputs when marker is dragged
     marker.on('dragend', function(event) {
         const position = marker.getLatLng();
-        document.getElementById('latitude').value = position.lat.toFixed(6);
-        document.getElementById('longitude').value = position.lng.toFixed(6);
+        // Keep higher precision when updating inputs so coordinates are not overly truncated
+        document.getElementById('latitude').value = position.lat.toFixed(12);
+        document.getElementById('longitude').value = position.lng.toFixed(12);
     });
 
     // Update marker position when inputs change
@@ -127,6 +138,16 @@ document.addEventListener('DOMContentLoaded', function() {
             map.setView([lat, lng]);
         }
     }
+    // Ensure map correctly renders tiles when container becomes visible
+    setTimeout(() => {
+        try {
+            map.invalidateSize();
+        } catch (e) {
+            console.warn('Error invalidating Leaflet map size', e);
+        }
+    }, 200);
+
+    window.addEventListener('resize', () => map.invalidateSize());
 });
 </script>
 

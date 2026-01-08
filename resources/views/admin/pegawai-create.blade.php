@@ -23,7 +23,7 @@
         @endif
         
         <!-- FORMULIR STORE -->
-        <form action="{{ route('admin.pegawai.store') }}" method="POST" class="space-y-6">
+        <form action="{{ route('admin.pegawai.store') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
             @csrf
 
             <!-- NIP -->
@@ -69,6 +69,16 @@
                     @endforeach
                 </select>
                 @error('divisi_id')
+                    <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <!-- FOTO WAJAH REFERENSI -->
+            <div>
+                <label for="foto_wajah_asli" class="block text-sm font-medium text-gray-700 mb-1">Foto Wajah Referensi (opsional)</label>
+                <input type="file" name="foto_wajah_asli" id="foto_wajah_asli" accept="image/*"
+                       class="w-full p-2 border border-gray-300 rounded-lg @error('foto_wajah_asli') border-red-500 @enderror">
+                @error('foto_wajah_asli')
                     <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                 @enderror
             </div>

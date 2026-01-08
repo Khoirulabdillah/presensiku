@@ -149,11 +149,7 @@
                                             <a href="{{ route('admin.izin.show', $item->id) }}"
                                                class="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1 rounded-md">
                                                 <i class="fas fa-eye mr-1"></i>Lihat
-                                            </a>
-                                            <a href="{{ route('admin.izin.edit', $item->id) }}"
-                                               class="text-yellow-600 hover:text-yellow-900 bg-yellow-50 px-3 py-1 rounded-md">
-                                                <i class="fas fa-edit mr-1"></i>Edit
-                                            </a>
+                                            </a
                                             <form action="{{ route('admin.izin.destroy', $item->id) }}" method="POST" class="inline"
                                                   onsubmit="return confirm('Apakah Anda yakin ingin menghapus permohonan izin ini?')">
                                                 @csrf

@@ -72,6 +72,7 @@
         <div class="mb-6">
             <div class="relative bg-gray-100 rounded-lg overflow-hidden" style="height: 400px;">
                 <video id="camera" class="w-full h-full object-cover" autoplay playsinline muted></video>
+                <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
                 <canvas id="canvas" class="hidden"></canvas>
 
                 {{-- Camera Controls --}}
@@ -84,6 +85,17 @@
                         <i class="fas fa-stop"></i>
                         <span>Stop Camera</span>
                     </button>
+                </div>
+                <div class="absolute top-4 left-4 bg-white/80 px-3 py-1 rounded-md text-sm flex items-center gap-3">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="enable-detect" />
+                        <span>Deteksi Wajah</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="require-detect" />
+                        <span>Wajib Deteksi untuk Presensi</span>
+                    </label>
+                    <div id="face-status" class="ml-2 text-xs text-gray-700">Tidak Terdeteksi</div>
                 </div>
             </div>
         </div>
@@ -108,25 +120,101 @@
     </div>
 </div>
 
-{{-- JavaScript for Camera Access --}}
+{{-- JavaScript for Camera Access and Real-time Face Detection --}}
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let video = document.getElementById('camera');
     let canvas = document.getElementById('canvas');
+    let overlay = document.getElementById('overlay');
+    let overlayCtx = overlay.getContext('2d');
     let startBtn = document.getElementById('start-camera');
     let stopBtn = document.getElementById('stop-camera');
     let presensiMasukBtn = document.getElementById('presensi-masuk');
     let presensiPulangBtn = document.getElementById('presensi-pulang');
     let statusMessage = document.getElementById('status-message');
     let statusText = document.getElementById('status-text');
+    let enableDetectCheckbox = document.getElementById('enable-detect');
+    let requireDetectCheckbox = document.getElementById('require-detect');
+    let faceStatus = document.getElementById('face-status');
     let stream = null;
+
+    let faceModel = null;
+    let detecting = false;
+    let faceDetected = false;
 
     // Update current time
     function updateTime() {
         document.getElementById('current-time').textContent = new Date().toLocaleTimeString('id-ID');
     }
     setInterval(updateTime, 1000);
+
+    function resizeOverlay() {
+        overlay.width = video.videoWidth || overlay.clientWidth;
+        overlay.height = video.videoHeight || overlay.clientHeight;
+    }
+
+    async function loadFaceModel() {
+        if (!faceModel) {
+            try {
+                faceModel = await blazeface.load();
+                console.log('Blazeface model loaded');
+            } catch (err) {
+                console.error('Failed to load face model', err);
+            }
+        }
+    }
+
+    async function detectLoop() {
+        if (!detecting || !faceModel) {
+            overlayCtx.clearRect(0,0,overlay.width,overlay.height);
+            faceDetected = false;
+            updateFaceStatus();
+            return;
+        }
+
+        try {
+            const predictions = await faceModel.estimateFaces(video, false);
+            overlayCtx.clearRect(0,0,overlay.width,overlay.height);
+
+            if (predictions && predictions.length > 0) {
+                faceDetected = true;
+                overlayCtx.strokeStyle = 'lime';
+                overlayCtx.lineWidth = Math.max(2, overlay.width / 200);
+                overlayCtx.fillStyle = 'rgba(0,255,0,0.12)';
+                predictions.forEach(pred => {
+                    const start = pred.topLeft;
+                    const end = pred.bottomRight;
+                    const x = start[0];
+                    const y = start[1];
+                    const w = end[0] - start[0];
+                    const h = end[1] - start[1];
+                    overlayCtx.fillRect(x, y, w, h);
+                    overlayCtx.strokeRect(x, y, w, h);
+                });
+            } else {
+                faceDetected = false;
+            }
+
+            updateFaceStatus();
+        } catch (err) {
+            console.error('Detection error', err);
+        }
+
+        requestAnimationFrame(detectLoop);
+    }
+
+    function updateFaceStatus() {
+        faceStatus.textContent = faceDetected ? 'Terdeteksi' : 'Tidak Terdeteksi';
+        faceStatus.style.color = faceDetected ? 'green' : '#374151';
+
+        if (requireDetectCheckbox.checked) {
+            presensiMasukBtn.disabled = !faceDetected || @if($presensiMasuk) true @else false @endif;
+            presensiPulangBtn.disabled = !faceDetected || @if($presensiPulang) true @else false @endif;
+        }
+    }
 
     // Start camera
     startBtn.addEventListener('click', async function() {
@@ -141,17 +229,30 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                resizeOverlay();
+            };
+
             startBtn.classList.add('hidden');
             stopBtn.classList.remove('hidden');
 
-            // Enable buttons only if not already presensi
-            @if(!$presensiMasuk)
-            presensiMasukBtn.disabled = false;
-            @endif
+            // Enable buttons only if not already presensi and not requiring detection
+            if (!requireDetectCheckbox.checked) {
+                @if(!$presensiMasuk)
+                presensiMasukBtn.disabled = false;
+                @endif
 
-            @if(!$presensiPulang)
-            presensiPulangBtn.disabled = false;
-            @endif
+                @if(!$presensiPulang)
+                presensiPulangBtn.disabled = false;
+                @endif
+            }
+
+            // If detection enabled, load model and start loop
+            if (enableDetectCheckbox.checked) {
+                await loadFaceModel();
+                detecting = true;
+                detectLoop();
+            }
 
             showStatus('Kamera berhasil diaktifkan', 'success');
         } catch (error) {
@@ -168,6 +269,10 @@ document.addEventListener('DOMContentLoaded', function() {
             stream = null;
         }
 
+        // stop detection
+        detecting = false;
+        overlayCtx.clearRect(0,0,overlay.width,overlay.height);
+
         startBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
 
@@ -178,10 +283,54 @@ document.addEventListener('DOMContentLoaded', function() {
         showStatus('Kamera dimatikan', 'info');
     });
 
+    // Toggle detection
+    enableDetectCheckbox.addEventListener('change', async function() {
+        if (enableDetectCheckbox.checked) {
+            await loadFaceModel();
+            if (stream) {
+                detecting = true;
+                detectLoop();
+            }
+        } else {
+            detecting = false;
+            overlayCtx.clearRect(0,0,overlay.width,overlay.height);
+            faceDetected = false;
+            updateFaceStatus();
+            if (!requireDetectCheckbox.checked && stream) {
+                @if(!$presensiMasuk)
+                presensiMasukBtn.disabled = false;
+                @endif
+                @if(!$presensiPulang)
+                presensiPulangBtn.disabled = false;
+                @endif
+            }
+        }
+    });
+
+    requireDetectCheckbox.addEventListener('change', function() {
+        // If requiring detection and no face currently detected, disable presensi until detected
+        if (requireDetectCheckbox.checked && !faceDetected) {
+            presensiMasukBtn.disabled = true;
+            presensiPulangBtn.disabled = true;
+        } else if (!requireDetectCheckbox.checked && stream) {
+            @if(!$presensiMasuk)
+            presensiMasukBtn.disabled = false;
+            @endif
+            @if(!$presensiPulang)
+            presensiPulangBtn.disabled = false;
+            @endif
+        }
+    });
+
     // Capture and send presensi
     async function capturePresensi(type) {
         if (!stream) {
             showStatus('Kamera belum diaktifkan', 'error');
+            return;
+        }
+
+        if (requireDetectCheckbox.checked && !faceDetected) {
+            showStatus('Wajah belum terdeteksi. Pastikan wajah terlihat jelas.', 'error');
             return;
         }
 
@@ -312,6 +461,11 @@ document.addEventListener('DOMContentLoaded', function() {
     presensiPulangBtn.textContent = 'Sudah Presensi Pulang';
     presensiPulangBtn.classList.add('opacity-50', 'cursor-not-allowed');
     @endif
+
+    // Resize overlay on window resize
+    window.addEventListener('resize', () => {
+        if (video && video.videoWidth) resizeOverlay();
+    });
 });
 
 // Function to go back to previous page
