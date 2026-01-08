@@ -85,8 +85,8 @@ class PresensiController extends Controller
             }
 
             // 5. Kirim ke Flask (Gunakan 'source_image' dan 'target_image' sesuai file Flask Anda)
-            // GANTI URL DI BAWAH INI SESUAI URL FLASK ANDA
-            $urlFlask = 'presensiku.pribumics.my.id/python-api/compare'; 
+            // GANTI URL DI BAWAH INI SESUAI URL FLASK ANDA (pastikan menyertakan scheme http/https)
+            $urlFlask = 'https://presensiku.pribumics.my.id/python-api/compare'; 
             
             $response = Http::attach(
                 'source_image', fopen($sourceImagePath, 'r'), 'source.jpg'
@@ -96,10 +96,18 @@ class PresensiController extends Controller
 
             $resData = $response->json();
 
+            // Log respons Flask untuk diagnosa jika gagal
+            if ($response->failed()) {
+                Log::error('Flask compare failed', ['status' => $response->status(), 'body' => $response->body()]);
+            } else {
+                Log::info('Flask compare response', ['status' => $response->status(), 'body' => $response->body()]);
+            }
+
             // Cek jika Flask mengembalikan error (misal: wajah tidak terdeteksi)
             if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
-                if (file_exists($tempPath)) @unlink($tempPath);
                 $msg = $resData['error'] ?? 'Wajah tidak cocok';
+                Log::warning('Presensi: face verification failed', ['nip' => $pegawai->nip, 'flask' => $resData, 'message' => $msg]);
+                if (file_exists($tempPath)) @unlink($tempPath);
                 return response()->json(['success' => false, 'message' => $msg], 422);
             }
 
