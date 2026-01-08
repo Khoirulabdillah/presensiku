@@ -78,6 +78,7 @@
                 <label for="foto_wajah_asli" class="block text-sm font-medium text-gray-700 mb-1">Foto Wajah Referensi (opsional)</label>
                 <input type="file" name="foto_wajah_asli" id="foto_wajah_asli" accept="image/*"
                        class="w-full p-2 border border-gray-300 rounded-lg @error('foto_wajah_asli') border-red-500 @enderror">
+                <input type="hidden" name="foto_wajah_encoding" id="foto_wajah_encoding" />
                 @error('foto_wajah_asli')
                     <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
                 @enderror
@@ -218,6 +219,33 @@
             });
         }
     });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const fileInput = document.getElementById('foto_wajah_asli');
+    const hiddenEnc = document.getElementById('foto_wajah_encoding');
+    if (!fileInput) return;
+
+    await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+    await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+    await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+
+    fileInput.addEventListener('change', async () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const img = await faceapi.bufferToImage(file);
+        const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+        if (!detection) {
+            alert('Tidak terdeteksi wajah pada foto. Pastikan wajah jelas dan menghadap kamera.');
+            hiddenEnc.value = '';
+            return;
+        }
+        const desc = Array.from(detection.descriptor);
+        hiddenEnc.value = JSON.stringify(desc);
+    });
+});
 </script>
 
 @endsection

@@ -142,7 +142,9 @@
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
+<!-- blazeface kept for quick detection fallback, but primary verification uses face-api -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js"></script>
 
 <script>
@@ -168,12 +170,16 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('current-time').textContent = new Date().toLocaleTimeString('id-ID');
     }, 1000);
 
-    // Load AI Model
+    // Load face-api models for descriptor computation and fallback blazeface for fast detection
     async function initAI() {
         try {
+            await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+            await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
             faceModel = await blazeface.load();
             faceStatus.textContent = 'Status: AI Siap';
         } catch (e) {
+            console.error(e);
             faceStatus.textContent = 'Status: Gagal memuat AI';
         }
     }
@@ -272,15 +278,29 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
+        // Compute descriptor from captured image (face-api)
+        let descriptor = null;
+        try {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
+            const img = await faceapi.bufferToImage(blob);
+            const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+            if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+        } catch (err) {
+            console.warn('descriptor error', err);
+        }
+
         // Get Location
         navigator.geolocation.getCurrentPosition(async (pos) => {
             try {
-                const response = await axios.post('/pegawai/presensi', {
+                const payload = {
                     photo: photoBase64,
                     type: type,
                     latitude: pos.coords.latitude,
                     longitude: pos.coords.longitude
-                }, {
+                };
+                if (descriptor) payload.photo_descriptor = descriptor;
+
+                const response = await axios.post('/pegawai/presensi', payload, {
                     headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
                 });
 
