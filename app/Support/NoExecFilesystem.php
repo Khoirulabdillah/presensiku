@@ -44,9 +44,14 @@ class NoExecFilesystem extends BaseFilesystem
 
     /**
      * Recursively copy a directory.
+     *
+     * Signature matches Illuminate\Filesystem\Filesystem::copyDirectory
      */
-    protected function copyDirectory($source, $dest)
+    public function copyDirectory($directory, $destination, $options = null)
     {
+        $source = $directory;
+        $dest = $destination;
+
         if (! is_dir($source)) {
             return false;
         }
