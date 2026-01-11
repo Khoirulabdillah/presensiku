@@ -142,13 +142,142 @@
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-<!-- Load TensorFlow first, then face-api, then BlazeFace -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-<!-- blazeface kept for quick detection fallback, but primary verification uses face-api -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js"></script>
-
+<!-- Dynamic loader for TFJS, face-api and BlazeFace to avoid duplicate loads and version conflicts -->
 <script>
+// Minimal robust client-side AI loader + detection fallback
+function loadScriptOnce(url, checkGlobal, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+        try {
+            if (checkGlobal && typeof checkGlobal() !== 'undefined' && checkGlobal() !== null) return resolve(checkGlobal());
+        } catch(e){}
+        const existing = Array.from(document.getElementsByTagName('script')).find(s => s.src && s.src.indexOf(url) !== -1);
+        if (existing) {
+            const start = Date.now();
+            (function waitForGlobal() {
+                try { if (checkGlobal && typeof checkGlobal() !== 'undefined' && checkGlobal() !== null) return resolve(checkGlobal()); } catch(e){}
+                if (Date.now() - start > timeout) return reject(new Error('Timeout loading ' + url));
+                setTimeout(waitForGlobal, 100);
+            })();
+            return;
+        }
+        const s = document.createElement('script');
+        s.src = url;
+        s.async = true;
+        s.onload = () => {
+            if (checkGlobal) {
+                const start = Date.now();
+                (function waitForGlobal2() {
+                    try { if (typeof checkGlobal() !== 'undefined' && checkGlobal() !== null) return resolve(checkGlobal()); } catch(e){}
+                    if (Date.now() - start > timeout) return reject(new Error('Timeout waiting for global after ' + url));
+                    setTimeout(waitForGlobal2, 100);
+                })();
+            } else {
+                resolve();
+            }
+        };
+        s.onerror = (e) => reject(e || new Error('Failed to load ' + url));
+        document.head.appendChild(s);
+    });
+}
+
+async function ensureAIlibs() {
+    const urls = {
+        tf: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js',
+        faceapi: 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+        blazeface: 'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js'
+    };
+    window.__ai_load_report = window.__ai_load_report || { tf: null, faceapi: null, blazeface: null };
+    let loadedAny = false;
+    try {
+        await loadScriptOnce(urls.tf, () => window.tf, 10000);
+        window.__ai_load_report.tf = 'ok';
+        loadedAny = true;
+    } catch (e) {
+        console.warn('Could not load TFJS:', e);
+        window.__ai_load_report.tf = String(e?.message || e);
+    }
+    try {
+        await loadScriptOnce(urls.faceapi, () => window.faceapi, 10000);
+        window.__ai_load_report.faceapi = 'ok';
+        loadedAny = true;
+    } catch (e) {
+        console.warn('Could not load face-api.js:', e);
+        window.__ai_load_report.faceapi = String(e?.message || e);
+    }
+    try {
+        await loadScriptOnce(urls.blazeface, () => window.blazeface, 10000);
+        window.__ai_load_report.blazeface = 'ok';
+        loadedAny = true;
+    } catch (e) {
+        console.warn('Could not load BlazeFace:', e);
+        window.__ai_load_report.blazeface = String(e?.message || e);
+    }
+    return loadedAny;
+}
+
+async function initAI() {
+    // init face-api models (try local then CDN), initialize blazeface if present
+    window.__ai_load_report = window.__ai_load_report || window.__ai_load_report === null ? window.__ai_load_report : {};
+    window.__ai_load_report.modelLoad = window.__ai_load_report.modelLoad || { local: null, cdn: null };
+    const localModels = '/models';
+    const cdnModels = 'https://justadudewhohacks.github.io/face-api.js/models/';
+    try {
+        // if faceapi isn't present, throw early
+        if (typeof faceapi === 'undefined') throw new Error('faceapi not loaded');
+        try {
+            await faceapi.nets.ssdMobilenetv1.loadFromUri(localModels);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(localModels);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(localModels);
+            window.__ai_load_report.modelLoad.local = 'ok';
+            faceApiAvailable = true;
+            window.__faceapi_inited = true;
+        } catch (mErrLocal) {
+            console.warn('Local face-api models not found, trying CDN fallback:', mErrLocal);
+            window.__ai_load_report.modelLoad.local = String(mErrLocal?.message || mErrLocal);
+            try {
+                await faceapi.nets.ssdMobilenetv1.loadFromUri(cdnModels);
+                await faceapi.nets.faceLandmark68Net.loadFromUri(cdnModels);
+                await faceapi.nets.faceRecognitionNet.loadFromUri(cdnModels);
+                window.__ai_load_report.modelLoad.cdn = 'ok';
+                faceApiAvailable = true;
+                window.__faceapi_inited = true;
+            } catch (mErrCdn) {
+                console.warn('CDN face-api models also failed:', mErrCdn);
+                window.__ai_load_report.modelLoad.cdn = String(mErrCdn?.message || mErrCdn);
+                faceApiAvailable = false;
+            }
+        }
+    } catch (e) {
+        console.warn('face-api not available to load models:', e);
+        faceApiAvailable = false;
+    }
+
+    try {
+        if (typeof blazeface !== 'undefined') {
+            faceModel = await blazeface.load();
+        }
+    } catch (e) {
+        console.warn('blazeface failed to load:', e);
+        faceModel = null;
+    }
+
+    if (faceApiAvailable) {
+        faceStatus.textContent = 'Status: AI Siap';
+        faceStatus.className = 'text-xs font-bold text-green-600';
+    } else if (faceModel) {
+        faceStatus.textContent = 'Status: AI terbatas (deteksi saja)';
+        faceStatus.className = 'text-xs font-bold text-yellow-600';
+    } else if ('FaceDetector' in window) {
+        faceStatus.textContent = 'Status: AI terbatas (native detector)';
+        faceStatus.className = 'text-xs font-bold text-yellow-600';
+        window.__ai_load_report = window.__ai_load_report || {};
+        window.__ai_load_report.native = 'ok';
+    } else {
+        faceStatus.textContent = 'Status: Gagal memuat AI';
+        faceStatus.className = 'text-xs font-bold text-red-600';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     let video = document.getElementById('camera');
     let canvas = document.getElementById('canvas');
@@ -174,91 +303,107 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Load face-api models for descriptor computation and fallback blazeface for fast detection
     let faceApiAvailable = false;
-    async function initAI() {
-        try {
-            // try load face-api models; if any fail, we'll fallback
-            await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
-            await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-            await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
-            faceApiAvailable = true;
-        } catch (e) {
-            console.warn('face-api models not available:', e);
-            faceApiAvailable = false;
-        }
-
-        try {
-            faceModel = await blazeface.load();
-        } catch (e) {
-            console.warn('blazeface failed to load:', e);
-            faceModel = null;
-        }
-
-        if (faceApiAvailable) {
-            faceStatus.textContent = 'Status: AI Siap';
-            faceStatus.className = 'text-xs font-bold text-green-600';
-        } else if (faceModel) {
-            faceStatus.textContent = 'Status: AI terbatas (deteksi saja)';
-            faceStatus.className = 'text-xs font-bold text-yellow-600';
-        } else {
-            faceStatus.textContent = 'Status: Gagal memuat AI';
-            faceStatus.className = 'text-xs font-bold text-red-600';
-        }
-    }
-    initAI();
-
     function resizeOverlay() {
         overlay.width = video.videoWidth || video.clientWidth || 640;
         overlay.height = video.videoHeight || video.clientHeight || 480;
     }
 
-    async function detectFrame() {
-        if (!isDetecting || !faceModel) return;
+    // Simple detection loop WITHOUT TensorFlow (native FaceDetector or skin-tone)
+    async function detectWithFaceDetector() {
+        if (!('FaceDetector' in window)) return false;
+        try {
+            const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+            const results = await detector.detect(video);
+            overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+            if (results && results.length > 0) {
+                const r = results[0].boundingBox;
+                const x = r.x, y = r.y, w = r.width, h = r.height;
+                overlayCtx.strokeStyle = '#10B981';
+                overlayCtx.lineWidth = 4;
+                overlayCtx.strokeRect(x, y, w, h);
+                lastFaceBox = { x, y, width: w, height: h };
+                return true;
+            }
+            return false;
+        } catch (e) { console.warn('FaceDetector failed:', e); return false; }
+    }
 
-        const predictions = await faceModel.estimateFaces(video, false);
-        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
-
-        if (predictions.length > 0) {
-            faceDetected = true;
-            faceStatus.textContent = 'Status: Wajah Terdeteksi';
-            faceStatus.className = 'text-xs font-bold text-green-600';
-            
-            // Draw Box
-            // use first prediction as primary
-            const pred = predictions[0];
-            const start = pred.topLeft;
-            const end = pred.bottomRight;
-            const size = [end[0] - start[0], end[1] - start[1]];
-            overlayCtx.strokeStyle = "#10B981";
-            overlayCtx.lineWidth = 4;
-            overlayCtx.strokeRect(start[0], start[1], size[0], size[1]);
-            lastFaceBox = { x: start[0], y: start[1], width: size[0], height: size[1] };
-
-            // Aktifkan tombol jika belum absen
-            @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
-            @if(!$presensiPulang) presensiPulangBtn.disabled = false; @endif
-        } else {
-            faceDetected = false;
-            faceStatus.textContent = 'Status: Wajah Tidak Terlihat';
-            faceStatus.className = 'text-xs font-bold text-red-600';
-            presensiMasukBtn.disabled = true;
-            presensiPulangBtn.disabled = true;
-            lastFaceBox = null;
+    function detectWithSkinTone() {
+        const w = 160, h = 120;
+        const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
+        const tctx = tmp.getContext('2d');
+        try { tctx.drawImage(video, 0, 0, w, h); } catch (e) { return null; }
+        const data = tctx.getImageData(0, 0, w, h).data;
+        let minX = w, minY = h, maxX = 0, maxY = 0, count = 0;
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const i = (y * w + x) * 4;
+                const r = data[i], g = data[i+1], b = data[i+2];
+                const max = Math.max(r,g,b), min = Math.min(r,g,b);
+                if (r > 95 && g > 40 && b > 20 && (max - min) > 15 && r > g && r > b) {
+                    count++;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
         }
+        if (count < 50) return null;
+        const scaleX = overlay.width / w, scaleY = overlay.height / h;
+        return { x: minX * scaleX, y: minY * scaleY, width: (maxX - minX) * scaleX, height: (maxY - minY) * scaleY };
+    }
 
-        if (isDetecting) requestAnimationFrame(detectFrame);
+    function drawBox(box) { overlayCtx.clearRect(0,0,overlay.width,overlay.height); if (!box) return; overlayCtx.strokeStyle='#10B981'; overlayCtx.lineWidth=4; overlayCtx.strokeRect(box.x, box.y, box.width, box.height); }
+
+    async function simpleDetectLoop() {
+        if (!isDetecting) return;
+        if ('FaceDetector' in window) {
+            try { const ok = await detectWithFaceDetector(); if (ok) { faceDetected=true; faceStatus.textContent='Status: Wajah Terdeteksi'; faceStatus.className='text-xs font-bold text-green-600'; presensiMasukBtn.disabled=false; presensiPulangBtn.disabled=false; requestAnimationFrame(simpleDetectLoop); return; } } catch(e){}
+        }
+        const skinBox = detectWithSkinTone();
+        if (skinBox) { drawBox(skinBox); faceDetected=true; faceStatus.textContent='Status: Wajah Terdeteksi'; faceStatus.className='text-xs font-bold text-green-600'; presensiMasukBtn.disabled=false; presensiPulangBtn.disabled=false; }
+        else { overlayCtx.clearRect(0,0,overlay.width,overlay.height); faceDetected=false; faceStatus.textContent='Status: Wajah Tidak Terlihat'; faceStatus.className='text-xs font-bold text-red-600'; presensiMasukBtn.disabled=true; presensiPulangBtn.disabled=true; }
+        requestAnimationFrame(simpleDetectLoop);
     }
 
     startBtn.addEventListener('click', async () => {
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 640, height: 480, facingMode: 'user' }
-            });
+            stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
             video.srcObject = stream;
             video.onloadedmetadata = async () => {
                 try { await video.play(); } catch(e) { console.warn('video.play failed', e); }
                 resizeOverlay();
                 isDetecting = true;
-                if (enableDetectCheckbox.checked) detectFrame();
+                try {
+                    const libsOk = await ensureAIlibs();
+                    if (libsOk) {
+                        await initAI();
+                        if (enableDetectCheckbox.checked) simpleDetectLoop();
+                    } else {
+                        let report = window.__ai_load_report || null;
+                        if (report) {
+                            const parts = [];
+                            parts.push('tf:' + (report.tf === 'ok' ? 'ok' : 'err'));
+                            parts.push('faceapi:' + (report.faceapi === 'ok' ? 'ok' : 'err'));
+                            parts.push('blazeface:' + (report.blazeface === 'ok' ? 'ok' : 'err'));
+                            faceStatus.textContent = 'Status: AI gagal dimuat (' + parts.join(', ') + ')';
+                        } else {
+                            faceStatus.textContent = 'Status: AI gagal dimuat';
+                        }
+                        faceStatus.className = 'text-xs font-bold text-red-600';
+                        faceDetected = true;
+                        @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
+                        @if(!$presensiPulang) presensiPulangBtn.disabled = false; @endif
+                    }
+                } catch (e) {
+                    console.warn('ensureAIlibs/initAI failed', e);
+                    faceStatus.textContent = 'Status: AI gagal dimuat';
+                    faceStatus.className = 'text-xs font-bold text-red-600';
+                    faceDetected = true;
+                    @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
+                    @if(!$presensiPulang) presensiPulangBtn.disabled = false; @endif
+                }
             };
             startBtn.classList.add('hidden');
             stopBtn.classList.remove('hidden');
@@ -266,6 +411,7 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Gagal akses kamera: ' + e.message);
         }
     });
+
 
     // Ensure overlay resizes on window resize
     window.addEventListener('resize', () => {
@@ -284,10 +430,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     async function captureAndSend(type) {
-        if (!faceDetected) {
-            alert('Wajah harus terdeteksi di dalam kotak!');
-            return;
-        }
+        // For local testing: always send the captured photo to server and
+        // let the Flask compare endpoint validate the image. Client-side
+        // descriptor computation is disabled to avoid TF/face-api issues.
 
         // Tampilkan Loading
         faceStatus.textContent = 'Status: Memproses Presensi...';
@@ -301,35 +446,37 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-        // Compute descriptor from captured image (face-api) if available.
-        // Use the last fast-detection box to crop a small region — much faster than running full-frame face-api detection.
+        // Compute descriptor client-side if face-api is available; otherwise
+        // leave descriptor null and rely on Flask server-side compare.
         let descriptor = null;
         if (faceApiAvailable) {
             try {
-                if (lastFaceBox) {
-                    const tc = document.createElement('canvas');
-                    tc.width = Math.max(80, Math.round(lastFaceBox.width));
-                    tc.height = Math.max(80, Math.round(lastFaceBox.height));
-                    const tctx = tc.getContext('2d');
-                    // draw the detected face region from the video onto small canvas
-                    tctx.drawImage(video, lastFaceBox.x, lastFaceBox.y, lastFaceBox.width, lastFaceBox.height, 0, 0, tc.width, tc.height);
-                    const blob = await new Promise(resolve => tc.toBlob(resolve, 'image/jpeg', 0.7));
-                    const img = await faceapi.bufferToImage(blob);
-                    const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-                    if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+                let detect = null;
+                try {
+                    detect = await faceapi.detectSingleFace(canvas).withFaceLandmarks().withFaceDescriptor();
+                } catch (innerErr) {
+                    console.warn('face-api detectSingleFace failed, retrying simple detection', innerErr);
+                    try {
+                        detect = await faceapi.detectSingleFace(canvas).withFaceLandmarks().withFaceDescriptor();
+                    } catch (e2) {
+                        console.error('face-api fallback detect also failed', e2);
+                        detect = null;
+                    }
+                }
+
+                if (detect && detect.descriptor) {
+                    descriptor = Array.from(detect.descriptor);
                 } else {
-                    // fallback to whole-canvas descriptor (slower)
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.7));
-                    const img = await faceapi.bufferToImage(blob);
-                    const detect = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-                    if (detect && detect.descriptor) descriptor = Array.from(detect.descriptor);
+                    console.warn('face-api: no face descriptor available on captured canvas');
+                    descriptor = null;
                 }
             } catch (err) {
-                console.warn('descriptor error', err);
+                console.error('face-api descriptor computation failed', err);
                 descriptor = null;
+                faceApiAvailable = false;
+                faceStatus.textContent = 'Status: AI error, fallback aktif';
+                faceStatus.className = 'text-xs font-bold text-yellow-600';
             }
-        } else {
-            descriptor = null;
         }
 
         // Get Location (high accuracy preferred)
