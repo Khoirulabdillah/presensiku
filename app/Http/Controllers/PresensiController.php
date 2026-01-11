@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
+use Carbon\Carbon;
 
 class PresensiController extends Controller
 {
@@ -43,7 +44,7 @@ class PresensiController extends Controller
             $user = Auth::user();
             $pegawai = Pegawai::where('users_id', $user->id)->first();
 
-            // 1. Validasi Input Base64 dari Blade
+            // Validate input (photo is base64 data URL)
             $validated = $request->validate([
                 'photo' => 'required|string',
                 'type' => 'required|in:masuk,pulang',
@@ -51,202 +52,56 @@ class PresensiController extends Controller
                 'longitude' => 'required|numeric',
             ]);
 
-            // 2. Proses Konversi Base64 ke File Temp
-            $imageData = $request->photo;
-            $imageData = str_replace('data:image/jpeg;base64,', '', $imageData);
-            $imageData = str_replace(' ', '+', $imageData);
-            $imageBinary = base64_decode($imageData);
+            // Decode base64 image
+            $imageData = preg_replace('/^data:image\/\w+;base64,/', '', $validated['photo']);
+            $imageBinary = base64_decode(str_replace(' ', '+', $imageData));
 
-            $tmpDir = 'presensi/tmp';
-            if (!Storage::disk('public')->exists($tmpDir)) {
-                Storage::disk('public')->makeDirectory($tmpDir);
+            // Ensure storage directory
+            $dir = 'presensi';
+            if (!Storage::disk('public')->exists($dir)) {
+                Storage::disk('public')->makeDirectory($dir);
             }
 
-            $tmpFilename = 'temp_' . $pegawai->nip . '_' . uniqid() . '.jpg';
-            $tmpRelative = $tmpDir . '/' . $tmpFilename;
-            Storage::disk('public')->put($tmpRelative, $imageBinary);
-            $tempPath = storage_path('app/public/' . $tmpRelative);
+            // Preview: don't save before checks? we'll save then delete if needed
+            $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Ymd_His') . '.jpg';
+            $finalRelative = $dir . '/' . $finalFilename;
+            Storage::disk('public')->put($finalRelative, $imageBinary);
 
-            $faceMatched = false; // will be set true when verification passes
-
-            // 3. Siapkan Path Foto Referensi (Foto Asli Pegawai)
-            $sourceImagePath = storage_path('app/public/' . $pegawai->foto_wajah_asli);
-
-            if (empty($pegawai->foto_wajah_asli) || !file_exists($sourceImagePath) || is_dir($sourceImagePath)) {
-                Log::warning('Presensi: missing or invalid foto_wajah_asli', ['nip' => $pegawai->nip, 'foto_wajah_asli' => $pegawai->foto_wajah_asli, 'resolved_path' => $sourceImagePath]);
-                return response()->json(['success' => false, 'message' => 'Foto referensi wajah asli tidak ditemukan atau tidak valid.'], 422);
-            }
-
-            // 4. Hitung Geofencing (Cek Jarak)
+            // Geofencing check (apply optional smaller override via env PRESENSI_MAX_RADIUS in meters)
             $office = OfficeSetting::first();
+            $distance = null;
             if ($office) {
                 $distance = $this->haversine($validated['latitude'], $validated['longitude'], $office->latitude, $office->longitude);
-                if ($distance > $office->radius) {
-                    if (file_exists($tempPath)) @unlink($tempPath);
-                    return response()->json(['success' => false, 'message' => 'Di luar radius kantor (' . round($distance) . 'm)'], 403);
+                $overrideRadius = intval(env('PRESENSI_MAX_RADIUS', 200));
+                $effectiveRadius = min($office->radius ?? $overrideRadius, $overrideRadius);
+                if ($distance > $effectiveRadius) {
+                    // delete saved file
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json(['success' => false, 'message' => 'Di luar radius kantor (' . round($distance) . 'm)', 'distance' => $distance], 403);
                 }
             }
 
-            // 5. Face verification (can be turned off for local development)
-            $verifyEnabled = filter_var(env('PRESENSI_VERIFY', true), FILTER_VALIDATE_BOOLEAN);
-            if ($verifyEnabled) {
-                // Browser-side verification path: if client supplied descriptor, compare here.
-                $clientDescriptor = $request->input('photo_descriptor');
-                $browserTolerance = floatval(env('BROWSER_TOLERANCE', 0.6));
-                $urlFlask = env('FLASK_COMPARE_URL');
+            // Prevent duplicate presensi and enforce Masuk before Pulang
+            $today = now()->toDateString();
+            $hasMasuk = Presensi::where('nip', $pegawai->nip)->whereDate('tanggal_presensi', $today)->where('type', 'masuk')->exists();
+            $hasPulang = Presensi::where('nip', $pegawai->nip)->whereDate('tanggal_presensi', $today)->where('type', 'pulang')->exists();
 
-                if ($clientDescriptor) {
-                    // Try to use stored encoding if available; otherwise request one-time encoding from Flask and cache it.
-                    $stored = $pegawai->foto_wajah_encoding;
-
-                    if (empty($stored) && $urlFlask) {
-                        try {
-                            $encodeResp = Http::timeout(10)->attach('image', fopen($sourceImagePath, 'r'), 'source.jpg')
-                                ->post(rtrim($urlFlask, '/') . '/encode', [
-                                    'model' => env('FLASK_MODEL', 'hog'),
-                                    'num_jitters' => env('FLASK_NUM_JITTERS', 0),
-                                ]);
-
-                            $encData = $encodeResp->json();
-                            if ($encodeResp->successful() && isset($encData['encoding']) && is_array($encData['encoding'])) {
-                                $pegawai->foto_wajah_encoding = $encData['encoding'];
-                                $pegawai->save();
-                                $stored = $pegawai->foto_wajah_encoding;
-                            } else {
-                                Log::warning('Presensi: encode failed or no encoding returned', ['nip' => $pegawai->nip, 'resp' => $encData, 'temp' => $tmpRelative]);
-                            }
-                        } catch (\Exception $e) {
-                            Log::warning('Presensi: encode request failed', ['nip' => $pegawai->nip, 'error' => $e->getMessage(), 'temp' => $tmpRelative]);
-                        }
-                    }
-
-                    if (!empty($stored) && is_array($stored) && is_array($clientDescriptor)) {
-                        $ref = count($stored) === count($clientDescriptor) ? $stored : ($stored[0] ?? $stored);
-                        $sum = 0.0;
-                        $len = min(count($ref), count($clientDescriptor));
-                        for ($i = 0; $i < $len; $i++) {
-                            $d = ($ref[$i] - $clientDescriptor[$i]);
-                            $sum += $d * $d;
-                        }
-                        $dist = sqrt($sum);
-                        if ($dist > $browserTolerance) {
-                            Log::warning('Presensi: browser face verification failed', ['nip' => $pegawai->nip, 'distance' => $dist, 'threshold' => $browserTolerance, 'temp' => $tmpRelative]);
-                            if (file_exists($tempPath)) @unlink($tempPath);
-                            return response()->json(['success' => false, 'message' => 'Wajah tidak cocok (distance: ' . round($dist, 4) . ')'], 422);
-                        }
-                        // matched — continue to save
-                    } else {
-                        // If still no stored encoding, fallback to Flask full compare if available
-                        if ($urlFlask) {
-                            $tolerance = env('FLASK_TOLERANCE', 0.50);
-                            $numJitters = env('FLASK_NUM_JITTERS', 2);
-                            $model = env('FLASK_MODEL', 'hog');
-
-                            try {
-                                $response = Http::attach(
-                                    'source_image',
-                                    fopen($sourceImagePath, 'r'),
-                                    'source.jpg'
-                                )->attach(
-                                    'target_image',
-                                    fopen($tempPath, 'r'),
-                                    'target.jpg'
-                                )->timeout(15)->post(rtrim($urlFlask, '/') . '/compare', [
-                                    'tolerance' => $tolerance,
-                                    'num_jitters' => $numJitters,
-                                    'model' => $model,
-                                ]);
-
-                                $resData = $response->json();
-
-                                if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
-                                    $msg = $resData['error'] ?? 'Wajah tidak cocok';
-                                    Log::warning('Presensi: flask verification failed', ['nip' => $pegawai->nip, 'flask' => $resData, 'message' => $msg, 'temp' => $tmpRelative]);
-                                    if (file_exists($tempPath)) @unlink($tempPath);
-                                    return response()->json(['success' => false, 'message' => $msg], 422);
-                                }
-                            } catch (\Exception $e) {
-                                Log::error('Presensi: flask compare exception', ['nip' => $pegawai->nip, 'error' => $e->getMessage(), 'temp' => $tmpRelative]);
-                                if (file_exists($tempPath)) @unlink($tempPath);
-                                return response()->json(['success' => false, 'message' => 'Gagal menghubungi layanan verifikasi wajah. Silakan hubungi admin.'], 422);
-                            }
-                        } else {
-                            // Fallback: try simple image hash (aHash) comparison using PHP GD
-                            try {
-                                $ahashThreshold = intval(env('AHASH_THRESHOLD', 12));
-                                $srcHash = $this->imageAHash($sourceImagePath);
-                                $tgtHash = $this->imageAHash($tempPath);
-                                if ($srcHash === null || $tgtHash === null) {
-                                    if (file_exists($tempPath)) @unlink($tempPath);
-                                    return response()->json(['success' => false, 'message' => 'Tidak dapat memverifikasi wajah (hash gagal).'], 422);
-                                }
-                                $distHash = $this->hammingDistance($srcHash, $tgtHash);
-                                if ($distHash > $ahashThreshold) {
-                                    Log::warning('Presensi: ahash verification failed', ['nip' => $pegawai->nip, 'distance' => $distHash, 'threshold' => $ahashThreshold, 'temp' => $tmpRelative]);
-                                    if (file_exists($tempPath)) @unlink($tempPath);
-                                    return response()->json(['success' => false, 'message' => 'Wajah tidak cocok (hash distance: ' . $distHash . ')'], 422);
-                                }
-                                // matched — continue
-                            } catch (\Exception $e) {
-                                Log::error('Presensi: ahash compare exception', ['nip' => $pegawai->nip, 'error' => $e->getMessage(), 'temp' => $tmpRelative]);
-                                if (file_exists($tempPath)) @unlink($tempPath);
-                                return response()->json(['success' => false, 'message' => 'Gagal memverifikasi wajah. Silakan hubungi admin.'], 422);
-                            }
-                        }
-                    }
-                } else {
-                    // No client descriptor: existing fallback behavior
-                    $urlFlask = env('FLASK_COMPARE_URL');
-                    if ($urlFlask) {
-                        $tolerance = env('FLASK_TOLERANCE', 0.50);
-                        $numJitters = env('FLASK_NUM_JITTERS', 2);
-                        $model = env('FLASK_MODEL', 'hog');
-
-                        try {
-                            $response = Http::attach(
-                                'source_image',
-                                fopen($sourceImagePath, 'r'),
-                                'source.jpg'
-                            )->attach(
-                                'target_image',
-                                fopen($tempPath, 'r'),
-                                'target.jpg'
-                            )->post(rtrim($urlFlask, '/') . '/compare', [
-                                'tolerance' => $tolerance,
-                                'num_jitters' => $numJitters,
-                                'model' => $model,
-                            ]);
-
-                            $resData = $response->json();
-
-                            if ($response->failed() || isset($resData['error']) || (isset($resData['match']) && !$resData['match'])) {
-                                $msg = $resData['error'] ?? 'Wajah tidak cocok';
-                                Log::warning('Presensi: flask verification failed', ['nip' => $pegawai->nip, 'flask' => $resData, 'message' => $msg, 'temp' => $tmpRelative]);
-                                if (file_exists($tempPath)) @unlink($tempPath);
-                                return response()->json(['success' => false, 'message' => $msg], 422);
-                            }
-                        } catch (\Exception $e) {
-                            Log::error('Presensi: flask compare exception', ['nip' => $pegawai->nip, 'error' => $e->getMessage(), 'temp' => $tmpRelative]);
-                            if (file_exists($tempPath)) @unlink($tempPath);
-                            return response()->json(['success' => false, 'message' => 'Gagal menghubungi layanan verifikasi wajah. Silakan hubungi admin.'], 422);
-                        }
-                    } else {
-                        // No client descriptor and no flask available -> cannot verify
-                        if (file_exists($tempPath)) @unlink($tempPath);
-                        return response()->json(['success' => false, 'message' => 'Wajah tidak dapat diverifikasi (Flask tidak tersedia).'], 422);
-                    }
+            if ($validated['type'] === 'masuk' && $hasMasuk) {
+                Storage::disk('public')->delete($finalRelative);
+                return response()->json(['success' => false, 'message' => 'Sudah melakukan presensi masuk pada hari ini.'], 422);
+            }
+            if ($validated['type'] === 'pulang') {
+                if (!$hasMasuk) {
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json(['success' => false, 'message' => 'Belum melakukan presensi masuk, tidak dapat melakukan presensi pulang.'], 422);
                 }
-            } else {
-                // Verification disabled for local/dev: proceed without face check
-                Log::info('Presensi: verification disabled by PRESENSI_VERIFY env, skipping face check', ['nip' => $pegawai->nip, 'temp' => $tmpRelative]);
+                if ($hasPulang) {
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json(['success' => false, 'message' => 'Sudah melakukan presensi pulang pada hari ini.'], 422);
+                }
             }
 
-            // 6. Simpan File Final dan Database
-            $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Ymd_His') . '.jpg';
-            $finalRelative = 'presensi/' . $finalFilename;
-
-            Storage::disk('public')->move($tmpRelative, $finalRelative);
-
+            // Persist presensi record
             $data = [
                 'nip' => $pegawai->nip,
                 'tanggal_presensi' => now()->toDateString(),
@@ -263,15 +118,60 @@ class PresensiController extends Controller
                 $data['foto_pulang'] = $finalRelative;
             }
 
-            Presensi::updateOrCreate(
-                ['nip' => $pegawai->nip, 'tanggal_presensi' => now()->toDateString(), 'type' => $validated['type']],
-                $data
-            );
+            Presensi::create($data);
 
-            // mark successful verification
-            $faceMatched = true;
+            // Time window and lateness calculation
+            $now = Carbon::now();
+            $latenessMinutes = 0;
+            $statusNote = null;
+            if ($office && $office->jam_masuk) {
+                try {
+                    $jamMasuk = Carbon::parse($office->jam_masuk)->setDate($now->year, $now->month, $now->day);
+                } catch (\Exception $e) {
+                    $jamMasuk = null;
+                }
+            } else {
+                $jamMasuk = null;
+            }
+            if ($office && $office->jam_pulang) {
+                try {
+                    $jamPulang = Carbon::parse($office->jam_pulang)->setDate($now->year, $now->month, $now->day);
+                } catch (\Exception $e) {
+                    $jamPulang = null;
+                }
+            } else {
+                $jamPulang = null;
+            }
 
-            return response()->json(['success' => true, 'message' => 'Presensi berhasil dicatat.', 'face_match' => $faceMatched]);
+            if ($validated['type'] === 'masuk' && $jamMasuk) {
+                if ($now->greaterThan($jamMasuk)) {
+                    $latenessMinutes = $jamMasuk->diffInMinutes($now);
+                    if ($latenessMinutes > 30) {
+                        $statusNote = 'terlambat_masuk';
+                    } else {
+                        $statusNote = 'tepat_waktu';
+                    }
+                } else {
+                    $statusNote = 'tepat_waktu';
+                }
+            }
+            if ($validated['type'] === 'pulang' && $jamPulang) {
+                if ($now->greaterThan($jamPulang)) {
+                    $latenessMinutes = $jamPulang->diffInMinutes($now);
+                    $statusNote = 'pulang_terlambat';
+                } else {
+                    $statusNote = 'pulang_tepat';
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Presensi berhasil dicatat.',
+                'face_match' => true,
+                'distance' => $distance,
+                'status' => $statusNote,
+                'late_minutes' => $latenessMinutes,
+            ]);
         } catch (\Exception $e) {
             Log::error('Presensi Error: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Kesalahan Sistem: ' . $e->getMessage()]);

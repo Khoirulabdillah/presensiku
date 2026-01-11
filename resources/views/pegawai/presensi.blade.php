@@ -99,10 +99,10 @@
                 {{-- Camera Controls --}}
                 <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4">
                     <button id="start-camera" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                        <i class="fas fa-play"></i> <span>Mulai Kamera</span>
+                        <i class="fas fa-play"></i>
                     </button>
                     <button id="stop-camera" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hidden">
-                        <i class="fas fa-stop"></i> <span>Matikan Kamera</span>
+                        <i class="fas fa-stop"></i>
                     </button>
                 </div>
 
@@ -118,11 +118,11 @@
 
         {{-- Presensi Actions --}}
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <button id="presensi-masuk" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
+            <button id="presensi-masuk" class="bg-green-600 hover:bg-green-700 justify-center text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
                 <i class="fas fa-sign-in-alt"></i> <span>Presensi Masuk</span>
             </button>
 
-            <button id="presensi-pulang" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
+            <button id="presensi-pulang" class="bg-blue-600 hover:bg-blue-700 justify-center text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
                 <i class="fas fa-sign-out-alt"></i> <span>Presensi Pulang</span>
             </button>
         </div>
@@ -183,7 +183,6 @@ function loadScriptOnce(url, checkGlobal, timeout = 15000) {
 async function ensureAIlibs() {
     const urls = {
         tf: 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js',
-        faceapi: 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
         blazeface: 'https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js'
     };
     window.__ai_load_report = window.__ai_load_report || { tf: null, faceapi: null, blazeface: null };
@@ -197,14 +196,6 @@ async function ensureAIlibs() {
         window.__ai_load_report.tf = String(e?.message || e);
     }
     try {
-        await loadScriptOnce(urls.faceapi, () => window.faceapi, 10000);
-        window.__ai_load_report.faceapi = 'ok';
-        loadedAny = true;
-    } catch (e) {
-        console.warn('Could not load face-api.js:', e);
-        window.__ai_load_report.faceapi = String(e?.message || e);
-    }
-    try {
         await loadScriptOnce(urls.blazeface, () => window.blazeface, 10000);
         window.__ai_load_report.blazeface = 'ok';
         loadedAny = true;
@@ -216,65 +207,27 @@ async function ensureAIlibs() {
 }
 
 async function initAI() {
-    // init face-api models (try local then CDN), initialize blazeface if present
-    window.__ai_load_report = window.__ai_load_report || window.__ai_load_report === null ? window.__ai_load_report : {};
-    window.__ai_load_report.modelLoad = window.__ai_load_report.modelLoad || { local: null, cdn: null };
-    const localModels = '/models';
-    const cdnModels = 'https://justadudewhohacks.github.io/face-api.js/models/';
+    // Initialize BlazeFace model if available (we skip face-api.js entirely)
     try {
-        // if faceapi isn't present, throw early
-        if (typeof faceapi === 'undefined') throw new Error('faceapi not loaded');
-        try {
-            await faceapi.nets.ssdMobilenetv1.loadFromUri(localModels);
-            await faceapi.nets.faceLandmark68Net.loadFromUri(localModels);
-            await faceapi.nets.faceRecognitionNet.loadFromUri(localModels);
-            window.__ai_load_report.modelLoad.local = 'ok';
-            faceApiAvailable = true;
-            window.__faceapi_inited = true;
-        } catch (mErrLocal) {
-            console.warn('Local face-api models not found, trying CDN fallback:', mErrLocal);
-            window.__ai_load_report.modelLoad.local = String(mErrLocal?.message || mErrLocal);
-            try {
-                await faceapi.nets.ssdMobilenetv1.loadFromUri(cdnModels);
-                await faceapi.nets.faceLandmark68Net.loadFromUri(cdnModels);
-                await faceapi.nets.faceRecognitionNet.loadFromUri(cdnModels);
-                window.__ai_load_report.modelLoad.cdn = 'ok';
-                faceApiAvailable = true;
-                window.__faceapi_inited = true;
-            } catch (mErrCdn) {
-                console.warn('CDN face-api models also failed:', mErrCdn);
-                window.__ai_load_report.modelLoad.cdn = String(mErrCdn?.message || mErrCdn);
-                faceApiAvailable = false;
-            }
-        }
-    } catch (e) {
-        console.warn('face-api not available to load models:', e);
-        faceApiAvailable = false;
-    }
-
-    try {
-        if (typeof blazeface !== 'undefined') {
+        if (typeof blazeface !== 'undefined' && typeof tf !== 'undefined') {
             faceModel = await blazeface.load();
+        } else {
+            faceModel = null;
         }
     } catch (e) {
         console.warn('blazeface failed to load:', e);
         faceModel = null;
     }
 
-    if (faceApiAvailable) {
-        faceStatus.textContent = 'Status: AI Siap';
+    if ('FaceDetector' in window) {
+        faceStatus.textContent = 'Status: Native detector tersedia';
         faceStatus.className = 'text-xs font-bold text-green-600';
     } else if (faceModel) {
-        faceStatus.textContent = 'Status: AI terbatas (deteksi saja)';
-        faceStatus.className = 'text-xs font-bold text-yellow-600';
-    } else if ('FaceDetector' in window) {
-        faceStatus.textContent = 'Status: AI terbatas (native detector)';
-        faceStatus.className = 'text-xs font-bold text-yellow-600';
-        window.__ai_load_report = window.__ai_load_report || {};
-        window.__ai_load_report.native = 'ok';
+        faceStatus.textContent = 'Status: AI siap (BlazeFace)';
+        faceStatus.className = 'text-xs font-bold text-green-600';
     } else {
-        faceStatus.textContent = 'Status: Gagal memuat AI';
-        faceStatus.className = 'text-xs font-bold text-red-600';
+        faceStatus.textContent = 'Status: Fallback deteksi (skin-tone)';
+        faceStatus.className = 'text-xs font-bold text-yellow-600';
     }
 }
 
@@ -295,6 +248,10 @@ document.addEventListener('DOMContentLoaded', function() {
     let faceDetected = false;
     let isDetecting = false;
     let lastFaceBox = null; // store last fast-detection box for faster descriptor crop
+
+        // server-side flags: has already presensi masuk/pulang
+        const serverHasMasuk = @json($presensiMasuk ? true : false);
+        const serverHasPulang = @json($presensiPulang ? true : false);
 
     // Timer
     setInterval(() => {
@@ -328,6 +285,31 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { console.warn('FaceDetector failed:', e); return false; }
     }
 
+    async function detectWithBlazeFace() {
+        if (!faceModel) return false;
+        try {
+            const predictions = await faceModel.estimateFaces(video, false);
+            overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+            if (predictions && predictions.length > 0) {
+                const p = predictions[0];
+                let topLeft = p.topLeft;
+                let bottomRight = p.bottomRight;
+                // Some builds return objects
+                if (topLeft && topLeft.x !== undefined) {
+                    topLeft = [topLeft.x, topLeft.y];
+                    bottomRight = [bottomRight.x, bottomRight.y];
+                }
+                const x = topLeft[0], y = topLeft[1], w = bottomRight[0] - topLeft[0], h = bottomRight[1] - topLeft[1];
+                overlayCtx.strokeStyle = '#10B981';
+                overlayCtx.lineWidth = 4;
+                overlayCtx.strokeRect(x, y, w, h);
+                lastFaceBox = { x, y, width: w, height: h };
+                return true;
+            }
+            return false;
+        } catch (e) { console.warn('BlazeFace detect failed:', e); return false; }
+    }
+
     function detectWithSkinTone() {
         const w = 160, h = 120;
         const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
@@ -358,12 +340,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function simpleDetectLoop() {
         if (!isDetecting) return;
+        // try native detector first
         if ('FaceDetector' in window) {
-            try { const ok = await detectWithFaceDetector(); if (ok) { faceDetected=true; faceStatus.textContent='Status: Wajah Terdeteksi'; faceStatus.className='text-xs font-bold text-green-600'; presensiMasukBtn.disabled=false; presensiPulangBtn.disabled=false; requestAnimationFrame(simpleDetectLoop); return; } } catch(e){}
+            try {
+                const ok = await detectWithFaceDetector();
+                if (ok) {
+                    faceDetected = true;
+                    faceStatus.textContent = 'Status: Wajah Terdeteksi';
+                    faceStatus.className = 'text-xs font-bold text-green-600';
+                    // enable buttons depending on server state
+                    presensiMasukBtn.disabled = serverHasMasuk ? true : false;
+                    presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+                    requestAnimationFrame(simpleDetectLoop);
+                    return;
+                }
+            } catch (e) { console.warn(e); }
         }
+
+        // try BlazeFace (tfjs) if available
+        if (faceModel) {
+            try {
+                const ok = await detectWithBlazeFace();
+                if (ok) {
+                    faceDetected = true;
+                    faceStatus.textContent = 'Status: Wajah Terdeteksi';
+                    faceStatus.className = 'text-xs font-bold text-green-600';
+                    presensiMasukBtn.disabled = serverHasMasuk ? true : false;
+                    presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+                    requestAnimationFrame(simpleDetectLoop);
+                    return;
+                }
+            } catch (e) { console.warn(e); }
+        }
+
+        // skin-tone heuristic fallback
         const skinBox = detectWithSkinTone();
-        if (skinBox) { drawBox(skinBox); faceDetected=true; faceStatus.textContent='Status: Wajah Terdeteksi'; faceStatus.className='text-xs font-bold text-green-600'; presensiMasukBtn.disabled=false; presensiPulangBtn.disabled=false; }
-        else { overlayCtx.clearRect(0,0,overlay.width,overlay.height); faceDetected=false; faceStatus.textContent='Status: Wajah Tidak Terlihat'; faceStatus.className='text-xs font-bold text-red-600'; presensiMasukBtn.disabled=true; presensiPulangBtn.disabled=true; }
+            if (skinBox) {
+            	drawBox(skinBox);
+            	faceDetected = true;
+            	faceStatus.textContent = 'Status: Wajah Terdeteksi';
+            	faceStatus.className = 'text-xs font-bold text-green-600';
+            	presensiMasukBtn.disabled = serverHasMasuk ? true : false;
+            	presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+        } else {
+            overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+            faceDetected = false;
+            faceStatus.textContent = 'Status: Wajah Tidak Terlihat';
+            faceStatus.className = 'text-xs font-bold text-red-600';
+            presensiMasukBtn.disabled = true;
+            presensiPulangBtn.disabled = true;
+        }
         requestAnimationFrame(simpleDetectLoop);
     }
 
@@ -377,32 +403,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 isDetecting = true;
                 try {
                     const libsOk = await ensureAIlibs();
-                    if (libsOk) {
-                        await initAI();
-                        if (enableDetectCheckbox.checked) simpleDetectLoop();
-                    } else {
-                        let report = window.__ai_load_report || null;
-                        if (report) {
-                            const parts = [];
-                            parts.push('tf:' + (report.tf === 'ok' ? 'ok' : 'err'));
-                            parts.push('faceapi:' + (report.faceapi === 'ok' ? 'ok' : 'err'));
-                            parts.push('blazeface:' + (report.blazeface === 'ok' ? 'ok' : 'err'));
-                            faceStatus.textContent = 'Status: AI gagal dimuat (' + parts.join(', ') + ')';
-                        } else {
-                            faceStatus.textContent = 'Status: AI gagal dimuat';
-                        }
-                        faceStatus.className = 'text-xs font-bold text-red-600';
-                        faceDetected = true;
-                        @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
-                        @if(!$presensiPulang) presensiPulangBtn.disabled = false; @endif
-                    }
+                    await initAI();
+                    if (enableDetectCheckbox.checked) simpleDetectLoop();
                 } catch (e) {
                     console.warn('ensureAIlibs/initAI failed', e);
-                    faceStatus.textContent = 'Status: AI gagal dimuat';
-                    faceStatus.className = 'text-xs font-bold text-red-600';
-                    faceDetected = true;
-                    @if(!$presensiMasuk) presensiMasukBtn.disabled = false; @endif
-                    @if(!$presensiPulang) presensiPulangBtn.disabled = false; @endif
+                    // keep fallback detection (skin-tone) active; do not auto-enable buttons
+                    faceStatus.textContent = 'Status: Tidak dapat memuat model AI, gunakan fallback deteksi';
+                    faceStatus.className = 'text-xs font-bold text-yellow-600';
+                    if (enableDetectCheckbox.checked) simpleDetectLoop();
                 }
             };
             startBtn.classList.add('hidden');
@@ -430,56 +438,25 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     async function captureAndSend(type) {
-        // For local testing: always send the captured photo to server and
-        // let the Flask compare endpoint validate the image. Client-side
-        // descriptor computation is disabled to avoid TF/face-api issues.
+        // Pastikan wajah terdeteksi sebelum mengirim
+        if (!faceDetected) {
+            alert('Wajah tidak terdeteksi. Pastikan kamera menangkap wajah dengan jelas.');
+            return;
+        }
 
         // Tampilkan Loading
         faceStatus.textContent = 'Status: Memproses Presensi...';
         presensiMasukBtn.disabled = true;
         presensiPulangBtn.disabled = true;
 
-        // Resize & Capture (Kecilkan ke 480px agar Flask tidak berat)
+        // Resize & Capture (kecilkan ke 480px agar upload ringan)
         canvas.width = 480;
         canvas.height = (video.videoHeight / video.videoWidth) * 480;
         let ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
-        // Compute descriptor client-side if face-api is available; otherwise
-        // leave descriptor null and rely on Flask server-side compare.
-        let descriptor = null;
-        if (faceApiAvailable) {
-            try {
-                let detect = null;
-                try {
-                    detect = await faceapi.detectSingleFace(canvas).withFaceLandmarks().withFaceDescriptor();
-                } catch (innerErr) {
-                    console.warn('face-api detectSingleFace failed, retrying simple detection', innerErr);
-                    try {
-                        detect = await faceapi.detectSingleFace(canvas).withFaceLandmarks().withFaceDescriptor();
-                    } catch (e2) {
-                        console.error('face-api fallback detect also failed', e2);
-                        detect = null;
-                    }
-                }
-
-                if (detect && detect.descriptor) {
-                    descriptor = Array.from(detect.descriptor);
-                } else {
-                    console.warn('face-api: no face descriptor available on captured canvas');
-                    descriptor = null;
-                }
-            } catch (err) {
-                console.error('face-api descriptor computation failed', err);
-                descriptor = null;
-                faceApiAvailable = false;
-                faceStatus.textContent = 'Status: AI error, fallback aktif';
-                faceStatus.className = 'text-xs font-bold text-yellow-600';
-            }
-        }
-
-        // Get Location (high accuracy preferred)
+        // Dapatkan lokasi lalu kirim ke server
         const geoOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
         navigator.geolocation.getCurrentPosition(async (pos) => {
             try {
@@ -489,26 +466,41 @@ document.addEventListener('DOMContentLoaded', function() {
                     latitude: pos.coords.latitude,
                     longitude: pos.coords.longitude
                 };
-                if (descriptor) payload.photo_descriptor = descriptor;
 
                 const response = await axios.post('/pegawai/presensi', payload, {
                     headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
                 });
 
                 if (response.data.success) {
-                    // show friendly notification and indicate face matched
                     const statusText = document.getElementById('status-text');
-                    if (response.data.face_match) {
-                        statusText.textContent = 'Wajah cocok — ' + response.data.message;
-                    } else {
-                        statusText.textContent = response.data.message;
+                    let msg = response.data.message;
+                    if (response.data.distance !== undefined && response.data.distance !== null) {
+                        msg += ' (jarak: ' + Math.round(response.data.distance) + ' m)';
                     }
+                    // show lateness info
+                    if (response.data.status === 'terlambat_masuk' && response.data.late_minutes) {
+                        msg += ' — Terlambat ' + response.data.late_minutes + ' menit';
+                    }
+                    if (response.data.status === 'pulang_terlambat' && response.data.late_minutes) {
+                        msg += ' — Pulang terlambat ' + response.data.late_minutes + ' menit';
+                    }
+                    statusText.textContent = msg;
                     document.getElementById('status-message').classList.remove('hidden');
-                    // short delay so user sees message, then reload to update UI
                     setTimeout(() => location.reload(), 1100);
                 } else {
                     alert('Gagal: ' + response.data.message);
-                    document.getElementById('status-text').textContent = response.data.message;
+                    const statusText = document.getElementById('status-text');
+                    let msg = response.data.message || 'Gagal';
+                    if (response.data.distance !== undefined && response.data.distance !== null) {
+                        msg += ' (jarak: ' + Math.round(response.data.distance) + ' m)';
+                    }
+                    if (response.data.status === 'terlambat_masuk' && response.data.late_minutes) {
+                        msg += ' — Terlambat ' + response.data.late_minutes + ' menit';
+                    }
+                    if (response.data.status === 'pulang_terlambat' && response.data.late_minutes) {
+                        msg += ' — Pulang terlambat ' + response.data.late_minutes + ' menit';
+                    }
+                    statusText.textContent = msg;
                     document.getElementById('status-message').classList.remove('hidden');
                 }
             } catch (err) {
