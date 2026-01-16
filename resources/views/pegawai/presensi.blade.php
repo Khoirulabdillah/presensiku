@@ -206,6 +206,9 @@ async function ensureAIlibs() {
     return loadedAny;
 }
 
+// Global flag shared between initAI() and DOM handlers
+var faceApiAvailable = false;
+
 async function initAI() {
     // Initialize BlazeFace model if available (we skip face-api.js entirely)
     try {
@@ -219,6 +222,7 @@ async function initAI() {
         faceModel = null;
     }
 
+<<<<<<< HEAD
     if ('FaceDetector' in window) {
         faceStatus.textContent = 'Status: Native detector tersedia';
         faceStatus.className = 'text-xs font-bold text-green-600';
@@ -228,6 +232,33 @@ async function initAI() {
     } else {
         faceStatus.textContent = 'Status: Fallback deteksi (skin-tone)';
         faceStatus.className = 'text-xs font-bold text-yellow-600';
+=======
+    // Use a safe DOM lookup here because callers may define `faceStatus` in
+    // a different scope. Avoid ReferenceError by checking element existence.
+    const faceStatusEl = document.getElementById('face-status');
+    if (faceApiAvailable) {
+        if (faceStatusEl) {
+            faceStatusEl.textContent = 'Status: AI Siap';
+            faceStatusEl.className = 'text-xs font-bold text-green-600';
+        }
+    } else if (faceModel) {
+        if (faceStatusEl) {
+            faceStatusEl.textContent = 'Status: AI terbatas (deteksi saja)';
+            faceStatusEl.className = 'text-xs font-bold text-yellow-600';
+        }
+    } else if ('FaceDetector' in window) {
+        if (faceStatusEl) {
+            faceStatusEl.textContent = 'Status: AI terbatas (native detector)';
+            faceStatusEl.className = 'text-xs font-bold text-yellow-600';
+        }
+        window.__ai_load_report = window.__ai_load_report || {};
+        window.__ai_load_report.native = 'ok';
+    } else {
+        if (faceStatusEl) {
+            faceStatusEl.textContent = 'Status: Gagal memuat AI';
+            faceStatusEl.className = 'text-xs font-bold text-red-600';
+        }
+>>>>>>> b7eac07 (yolloooo)
     }
 }
 
@@ -259,7 +290,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 1000);
 
     // Load face-api models for descriptor computation and fallback blazeface for fast detection
-    let faceApiAvailable = false;
     function resizeOverlay() {
         overlay.width = video.videoWidth || video.clientWidth || 640;
         overlay.height = video.videoHeight || video.clientHeight || 480;
