@@ -96,8 +96,8 @@
                 @php
                     $jamMasuk = $office->jam_masuk ? \Carbon\Carbon::parse($office->jam_masuk)->format('H:i') : '-';
                     $jamPulang = $office->jam_pulang ? \Carbon\Carbon::parse($office->jam_pulang)->format('H:i') : '-';
-                    $batasAwal = ($office->jam_masuk && $office->batas_awal_masuk) ? \Carbon\Carbon::parse($office->jam_masuk)->subMinutes($office->batas_awal_masuk)->format('H:i') : '-';
-                    $batasToleransi = ($office->jam_masuk && $office->toleransi_terlambat) ? \Carbon\Carbon::parse($office->jam_masuk)->addMinutes($office->toleransi_terlambat)->format('H:i') : '-';
+                    $batasAwal = ($office->jam_masuk && $office->batas_awal_masuk) ? \Carbon\Carbon::parse($office->jam_masuk)->subMinutes((int)$office->batas_awal_masuk)->format('H:i') : '-';
+                    $batasToleransi = ($office->jam_masuk && $office->toleransi_terlambat) ? \Carbon\Carbon::parse($office->jam_masuk)->addMinutes((int)$office->toleransi_terlambat)->format('H:i') : '-';
                 @endphp
                 <div class="bg-white/90 border border-gray-100 rounded-lg p-3 shadow-sm max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
                     <div class="flex items-center gap-4">
