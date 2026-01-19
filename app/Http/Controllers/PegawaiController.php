@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Pegawai;
 use App\Models\Divisi;
 use App\Models\User;
+use App\Models\Presensi;
+use App\Models\Izin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
@@ -233,5 +235,51 @@ class PegawaiController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/login');
+    }
+
+    /**
+     * Display the dashboard for the logged-in pegawai.
+     */
+    public function home()
+    {
+        $user = Auth::user();
+        $pegawai = Pegawai::where('users_id', $user->id)->first();
+        
+        $hadir = 0;
+        $izin = 0;
+        $cuti = 0;
+
+        if ($pegawai) {
+             $nip = $pegawai->nip;
+             $currentMonth = now()->month;
+             $currentYear = now()->year;
+
+             // Count Presensi (Hadir) - assuming one 'masuk' record per day
+             $hadir = Presensi::where('nip', $nip)
+                ->whereMonth('tanggal_presensi', $currentMonth)
+                ->whereYear('tanggal_presensi', $currentYear)
+                ->where('type', 'masuk')
+                ->count();
+
+             // Count Izin (not Cuti)
+             $izin = Izin::where('nip', $nip)
+                ->whereMonth('tanggal_mulai', $currentMonth)
+                ->whereYear('tanggal_mulai', $currentYear)
+                ->where('status_izin', 'approved')
+                ->where(function($query) {
+                    $query->where('jenis_izin', 'not like', '%Cuti%'); 
+                })
+                ->count();
+
+             // Count Cuti
+             $cuti = Izin::where('nip', $nip)
+                ->whereMonth('tanggal_mulai', $currentMonth)
+                ->whereYear('tanggal_mulai', $currentYear)
+                ->where('status_izin', 'approved')
+                ->where('jenis_izin', 'like', '%Cuti%')
+                ->count();
+        }
+
+        return view('pegawai.home', compact('hadir', 'izin', 'cuti'));
     }
 }

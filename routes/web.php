@@ -14,9 +14,8 @@ Route::get('/', function () {
 });
 
 // Route tampilan pegawai — dibatasi hanya untuk pengguna terautentikasi
-Route::get('/pegawai/home', function () {
-    return view('pegawai.home');
-})->middleware('auth')->name('pegawai.home');
+Route::get('/pegawai/home', [PegawaiController::class, 'home'])
+    ->middleware('auth')->name('pegawai.home');
 
 // INDEX: tampilkan daftar pegawai
 Route::get('/admin/pegawai', [AdminController::class, 'pegawai'])

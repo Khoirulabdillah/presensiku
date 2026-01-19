@@ -10,6 +10,13 @@ class DashboardController extends Controller
 {
     public function index()
     {
+        $user = auth()->user();
+        
+        // Redirect pegawai to their specific dashboard
+        if ($user->role === 'pegawai') {
+            return redirect()->route('pegawai.home');
+        }
+
         $today = now()->toDateString();
 
         // Hitung hadir hari ini (presensi masuk)

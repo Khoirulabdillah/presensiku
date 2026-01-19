@@ -13,18 +13,18 @@
         {{-- Statistik Kehadiran (Lebih Responsif) --}}
         <div class="flex justify-around text-center mt-6 pt-4 border-t border-gray-100">
             <div class="w-1/3 p-1">
-                <p class="text-xl sm:text-2xl font-bold text-blue-600">5</p>
+                <p class="text-xl sm:text-2xl font-bold text-blue-600">{{ $hadir }}</p>
                 <p class="text-xs sm:text-sm text-gray-600">Hadir</p>
                 <div class="h-1 w-full bg-blue-600 mx-auto rounded-full mt-2"></div>
             </div>
             
             <div  class="w-1/3 p-1 border-l border-r border-gray-100 block">
-                <p class="text-xl sm:text-2xl font-bold text-yellow-500">0</p>
+                <p class="text-xl sm:text-2xl font-bold text-yellow-500">{{ $izin }}</p>
                 <p class="text-xs sm:text-sm text-gray-600">Izin</p>
                 <div class="h-1 w-full bg-yellow-500 mx-auto rounded-full mt-2"></div>
             </div>
             <div class="w-1/3 p-1">
-                <p class="text-xl sm:text-2xl font-bold text-green-500">0</p>
+                <p class="text-xl sm:text-2xl font-bold text-green-500">{{ $cuti }}</p>
                 <p class="text-xs sm:text-sm text-gray-600">Cuti</p>
                 <div class="h-1 w-full bg-green-500 mx-auto rounded-full mt-2"></div>
             </div>
