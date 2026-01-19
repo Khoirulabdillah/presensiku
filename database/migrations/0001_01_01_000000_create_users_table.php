@@ -16,7 +16,8 @@ return new class extends Migration
             $table->string('name');
             $table->string('username');
             $table->string('password');
-            $table->string('role');
+            // Restrict role to enum values to avoid typo/invalid role assignment
+            $table->enum('role', ['admin', 'pegawai'])->default('pegawai');
             $table->rememberToken();
             $table->timestamps();
         });

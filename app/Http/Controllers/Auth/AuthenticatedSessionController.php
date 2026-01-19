@@ -45,6 +45,12 @@ class AuthenticatedSessionController extends Controller
                 Log::info('Redirecting to pegawai.home (role)', ['user_id' => $user->id]);
                 return redirect()->route('pegawai.home');
             }
+
+            // Unknown role string: send to login with error to avoid landing on wrong page
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return redirect()->route('login')->withErrors(['role' => 'Role tidak valid untuk user ini.']);
         }
 
         // If role is not set or doesn't match but user has a Pegawai record, treat as pegawai

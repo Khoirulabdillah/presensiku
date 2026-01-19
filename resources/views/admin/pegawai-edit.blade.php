@@ -254,7 +254,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             const img = await faceapi.bufferToImage(file);
             const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
             if (!detection) {
-                alert('Tidak terdeteksi wajah pada foto. Pastikan wajah jelas dan menghadap kamera.');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Wajah tidak terdeteksi',
+                    text: 'Pastikan wajah jelas dan menghadap kamera.',
+                });
                 hiddenEnc.value = '';
                 return;
             }

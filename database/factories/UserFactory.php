@@ -40,7 +40,8 @@ class UserFactory extends Factory
             'name' => $faker->name(),
             'username' => $faker->userName(),
             'password' => Hash::make('password'),
-            'role' => 'user',
+            // Default seeded users as pegawai; override in states when needed
+            'role' => 'pegawai',
             'remember_token' => Str::random(10),
         ];
     }

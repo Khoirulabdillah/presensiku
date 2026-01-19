@@ -121,77 +121,53 @@ document.addEventListener('DOMContentLoaded', function() {
     // Update inputs when marker is dragged
     marker.on('dragend', function(event) {
         const position = marker.getLatLng();
-        // Keep higher precision when updating inputs so coordinates are not overly truncated
-        document.getElementById('latitude').value = position.lat.toFixed(12);
-        document.getElementById('longitude').value = position.lng.toFixed(12);
+        document.getElementById('latitude').value = position.lat.toFixed(7);
+        document.getElementById('longitude').value = position.lng.toFixed(7);
     });
 
-    // Normalize coordinate string (allow comma decimals), trim
-    function normalizeCoordString(s) {
-        if (typeof s !== 'string') return '';
-        return s.replace(/,/g, '.').trim();
-    }
-
-    // Update marker position when inputs change (sanitize comma -> dot)
     const latInput = document.getElementById('latitude');
     const lngInput = document.getElementById('longitude');
 
-    latInput.addEventListener('input', function() {
-        // convert any comma decimals to dot for parsing and storage
-        this.value = this.value.replace(/,/g, '.');
-        updateMarker();
-    });
-
-    lngInput.addEventListener('input', function() {
-        this.value = this.value.replace(/,/g, '.');
-        updateMarker();
-    });
-
-    // Also respond to change/blur and Enter key so manual edits reliably update
-    [latInput, lngInput].forEach(function(el) {
-        el.addEventListener('change', function() {
-            this.value = this.value.replace(/,/g, '.').trim();
-            updateMarker();
-        });
-        el.addEventListener('blur', function() {
-            this.value = this.value.replace(/,/g, '.').trim();
-            updateMarker();
-        });
-        el.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                this.value = this.value.replace(/,/g, '.').trim();
-                updateMarker();
-            }
-        });
-    });
-
-    function updateMarker() {
-        const rawLat = latInput.value;
-        const rawLng = lngInput.value;
-        const normLatStr = normalizeCoordString(rawLat);
-        const normLngStr = normalizeCoordString(rawLng);
-        const lat = parseFloat(normLatStr);
-        const lng = parseFloat(normLngStr);
-        // Debug logs to help diagnose manual input issues
-        console.debug('updateMarker raw:', { rawLat, rawLng });
-        console.debug('updateMarker normalized:', { normLatStr, normLngStr });
-        console.debug('updateMarker parsed:', { lat, lng });
+    function updateMapFromInput() {
+        const latStr = latInput.value.replace(/,/g, '.');
+        const lngStr = lngInput.value.replace(/,/g, '.');
+        const lat = parseFloat(latStr);
+        const lng = parseFloat(lngStr);
 
         if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            const currentLatLng = marker.getLatLng();
+            // Update marker position
             marker.setLatLng([lat, lng]);
-            map.setView([lat, lng]);
-        } else {
-            console.warn('Invalid coordinates, marker not moved', { lat, lng });
+            
+            // Pan map to new position if it's significantly different
+            if (Math.abs(currentLatLng.lat - lat) > 0.0001 || Math.abs(currentLatLng.lng - lng) > 0.0001) {
+                map.panTo([lat, lng]);
+            }
         }
     }
 
-    // Ensure values are sanitized before form submission
+    // Update map immediately when user types
+    latInput.addEventListener('input', updateMapFromInput);
+    lngInput.addEventListener('input', updateMapFromInput);
+
+    // Format input on blur (finalize the value)
+    function finalizeInput() {
+        let val = this.value.replace(/,/g, '.').trim();
+        if (val !== '' && !isNaN(parseFloat(val))) {
+           this.value = parseFloat(val); // Optional: reformat to clean number string
+        }
+        updateMapFromInput();
+    }
+
+    latInput.addEventListener('blur', finalizeInput);
+    lngInput.addEventListener('blur', finalizeInput);
+
+    // Ensure values are formatted correctly before form submission
     const officeForm = document.getElementById('office-settings-form');
     if (officeForm) {
         officeForm.addEventListener('submit', function() {
-            latInput.value = normalizeCoordString(latInput.value);
-            lngInput.value = normalizeCoordString(lngInput.value);
+            latInput.value = latInput.value.replace(/,/g, '.').trim();
+            lngInput.value = lngInput.value.replace(/,/g, '.').trim();
         });
     }
     // Ensure map correctly renders tiles when container becomes visible

@@ -1,33 +1,32 @@
-from flask import Flask, request, render_template, jsonify
-from werkzeug.utils import secure_filename
+from flask import Flask, request, jsonify
 import os
 import cv2
 import numpy as np
-from PIL import Image
-import io
 import base64
 from flask_cors import CORS
+import face_recognition
 
-app = Flask(__name__, template_folder='../templates', static_folder='../static')
+app = Flask(__name__)
 CORS(app)  # Enable CORS for Laravel integration
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), '..', 'uploads')
 
-# Buat folder uploads jika belum ada
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Load pre-trained face cascade classifier
+# Load pre-trained face cascade classifier untuk deteksi cepat
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 )
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def decode_base64_image(image_data):
+    """Decode base64 image ke format OpenCV"""
+    if image_data.startswith('data:image'):
+        image_data = image_data.split(',')[1]
+    
+    image_bytes = base64.b64decode(image_data)
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    image_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    return image_cv2
 
 def detect_faces_in_image(image_cv2):
-    """Deteksi wajah dalam gambar menggunakan OpenCV"""
+    """Deteksi wajah dalam gambar menggunakan OpenCV (cepat untuk preview)"""
     gray = cv2.cvtColor(image_cv2, cv2.COLOR_BGR2GRAY)
     faces = face_cascade.detectMultiScale(
         gray,
@@ -37,82 +36,14 @@ def detect_faces_in_image(image_cv2):
     )
     return faces
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-# API Endpoint untuk deteksi wajah dari gambar
-@app.route('/api/detect-face', methods=['POST'])
-def api_detect_face():
-    """
-    API endpoint untuk deteksi wajah
-    Menerima gambar sebagai base64 atau file upload
-    Returns: JSON dengan hasil deteksi
-    """
-    try:
-        # Cek apakah image dikirim sebagai file atau base64
-        image_cv2 = None
-        
-        if 'file' in request.files:
-            file = request.files['file']
-            if file.filename == '':
-                return jsonify({'success': False, 'error': 'File tidak dipilih'}), 400
-            
-            if not allowed_file(file.filename):
-                return jsonify({'success': False, 'error': 'Tipe file tidak didukung'}), 400
-            
-            file_bytes = file.read()
-            nparr = np.frombuffer(file_bytes, np.uint8)
-            image_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        elif 'image' in request.json:
-            # Menerima base64 image
-            image_data = request.json['image']
-            if image_data.startswith('data:image'):
-                image_data = image_data.split(',')[1]
-            
-            image_bytes = base64.b64decode(image_data)
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            image_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        else:
-            return jsonify({'success': False, 'error': 'Tidak ada image yang dikirim'}), 400
-        
-        if image_cv2 is None:
-            return jsonify({'success': False, 'error': 'Gagal membaca gambar'}), 400
-        
-        # Deteksi wajah
-        faces = detect_faces_in_image(image_cv2)
-        
-        if len(faces) == 0:
-            return jsonify({
-                'success': True,
-                'face_count': 0,
-                'faces': [],
-                'message': 'Tidak ada wajah terdeteksi'
-            })
-        
-        # Format hasil deteksi
-        faces_list = []
-        for i, (x, y, w, h) in enumerate(faces):
-            faces_list.append({
-                'id': i + 1,
-                'x': int(x),
-                'y': int(y),
-                'width': int(w),
-                'height': int(h),
-                'confidence': 0.95  # Placeholder confidence
-            })
-        
-        return jsonify({
-            'success': True,
-            'face_count': len(faces),
-            'faces': faces_list,
-            'message': f'{len(faces)} wajah terdeteksi'
-        })
-    
-    except Exception as e:
-        return jsonify({'success': False, 'error': f'Error: {str(e)}'}), 500
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'success': True,
+        'status': 'running',
+        'message': 'Flask Face Recognition API is running'
+    })
 
 # API Endpoint untuk deteksi wajah dari video stream (base64)
 @app.route('/api/detect-face-frame', methods=['POST'])
@@ -127,13 +58,7 @@ def api_detect_face_frame():
         if not data or 'frame' not in data:
             return jsonify({'success': False, 'error': 'Tidak ada frame'}), 400
         
-        frame_data = data['frame']
-        if frame_data.startswith('data:image'):
-            frame_data = frame_data.split(',')[1]
-        
-        frame_bytes = base64.b64decode(frame_data)
-        nparr = np.frombuffer(frame_bytes, np.uint8)
-        image_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        image_cv2 = decode_base64_image(data['frame'])
         
         if image_cv2 is None:
             return jsonify({'success': False, 'face_count': 0})
@@ -151,50 +76,111 @@ def api_detect_face_frame():
     except Exception as e:
         return jsonify({'success': False, 'face_count': 0, 'error': str(e)})
 
-@app.route('/detect', methods=['POST'])
-def detect():
-    """Original endpoint untuk testing dengan browser"""
+@app.route('/api/validate-face', methods=['POST'])
+def api_validate_face():
+    """
+    API endpoint untuk validasi wajah dengan foto referensi
+    Menerima:
+    - photo: foto yang akan divalidasi (base64)
+    - reference_photo: foto referensi pegawai (base64) 
+    Returns: JSON dengan hasil validasi (match/tidak match) dan similarity score
+    """
     try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'Tidak ada file yang diunggah'}), 400
+        data = request.json
+        if not data or 'photo' not in data or 'reference_photo' not in data:
+            return jsonify({
+                'success': False, 
+                'error': 'Photo dan reference_photo harus dikirim'
+            }), 400
         
-        file = request.files['file']
+        # Decode kedua gambar
+        photo_cv2 = decode_base64_image(data['photo'])
+        reference_cv2 = decode_base64_image(data['reference_photo'])
         
-        if file.filename == '':
-            return jsonify({'error': 'File tidak dipilih'}), 400
+        if photo_cv2 is None or reference_cv2 is None:
+            return jsonify({
+                'success': False, 
+                'error': 'Gagal membaca gambar'
+            }), 400
         
-        if not allowed_file(file.filename):
-            return jsonify({'error': 'Tipe file tidak didukung. Gunakan PNG, JPG, JPEG, GIF, atau BMP'}), 400
+        # Convert BGR (OpenCV) to RGB (face_recognition)
+        photo_rgb = cv2.cvtColor(photo_cv2, cv2.COLOR_BGR2RGB)
+        reference_rgb = cv2.cvtColor(reference_cv2, cv2.COLOR_BGR2RGB)
         
-        # Baca file gambar
-        file_bytes = file.read()
-        nparr = np.frombuffer(file_bytes, np.uint8)
-        image_cv2 = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # Deteksi dan encode wajah di foto yang akan divalidasi
+        photo_face_locations = face_recognition.face_locations(photo_rgb)
+        if len(photo_face_locations) == 0:
+            return jsonify({
+                'success': False,
+                'match': False,
+                'error': 'Tidak ada wajah terdeteksi di foto',
+                'face_count': 0
+            })
         
-        if image_cv2 is None:
-            return jsonify({'error': 'Gagal membaca gambar'}), 400
+        if len(photo_face_locations) > 1:
+            return jsonify({
+                'success': False,
+                'match': False,
+                'error': 'Terdeteksi lebih dari 1 wajah. Pastikan hanya ada 1 wajah',
+                'face_count': len(photo_face_locations)
+            })
         
-        # Deteksi wajah
-        faces = detect_faces_in_image(image_cv2)
+        photo_encodings = face_recognition.face_encodings(photo_rgb, photo_face_locations)
+        if len(photo_encodings) == 0:
+            return jsonify({
+                'success': False,
+                'match': False,
+                'error': 'Gagal mengekstrak fitur wajah dari foto'
+            })
         
-        # Gambar kotak di sekitar wajah yang terdeteksi
-        image_with_faces = image_cv2.copy()
-        face_count = 0
-        for (x, y, w, h) in faces:
-            cv2.rectangle(image_with_faces, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            face_count += 1
+        photo_encoding = photo_encodings[0]
         
-        # Simpan gambar hasil
-        _, buffer = cv2.imencode('.jpg', image_with_faces)
-        img_base64_str = base64.b64encode(buffer).decode()
+        # Deteksi dan encode wajah di foto referensi
+        reference_face_locations = face_recognition.face_locations(reference_rgb)
+        if len(reference_face_locations) == 0:
+            return jsonify({
+                'success': False,
+                'match': False,
+                'error': 'Tidak ada wajah terdeteksi di foto referensi',
+                'reference_face_count': 0
+            })
         
-        return render_template('results.html', 
-                             image=img_base64_str,
-                             face_count=face_count,
-                             faces=faces.tolist() if len(faces) > 0 else [])
+        reference_encodings = face_recognition.face_encodings(reference_rgb, reference_face_locations)
+        if len(reference_encodings) == 0:
+            return jsonify({
+                'success': False,
+                'match': False,
+                'error': 'Gagal mengekstrak fitur wajah dari foto referensi'
+            })
+        
+        reference_encoding = reference_encodings[0]
+        
+        # Bandingkan wajah
+        # face_distance: semakin kecil semakin mirip (0 = identik, >0.6 = beda orang)
+        face_distance = face_recognition.face_distance([reference_encoding], photo_encoding)[0]
+        
+        # Threshold untuk menentukan match (0.6 adalah default, bisa disesuaikan)
+        # Untuk sistem presensi, gunakan threshold yang lebih ketat (0.5)
+        threshold = 0.6
+        is_match = face_distance < threshold
+        
+        # Konversi distance ke similarity score (0-100%)
+        similarity = max(0, (1 - face_distance) * 100)
+        
+        return jsonify({
+            'success': True,
+            'match': bool(is_match),
+            'similarity': round(similarity, 2),
+            'distance': round(float(face_distance), 4),
+            'threshold': threshold,
+            'message': 'Wajah cocok' if is_match else 'Wajah tidak cocok',
+            'face_count': len(photo_face_locations),
+            'reference_face_count': len(reference_face_locations)
+        })
     
     except Exception as e:
-        return jsonify({'error': f'Terjadi kesalahan: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('FLASK_SERVER_PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)

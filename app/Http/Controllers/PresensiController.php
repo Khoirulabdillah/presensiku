@@ -99,6 +99,68 @@ class PresensiController extends Controller
                 }
             }
 
+            // Face validation against reference photo (if available)
+            $flaskUrl = rtrim(env('FLASK_SERVER_URL', 'http://127.0.0.1:5000'), '/');
+            $referencePath = $pegawai->foto_wajah_asli;
+            if (!$referencePath || !Storage::disk('public')->exists($referencePath)) {
+                Storage::disk('public')->delete($finalRelative);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Foto referensi pegawai belum tersedia, hubungi admin.',
+                ], 422);
+            }
+
+            try {
+                $referenceBinary = Storage::disk('public')->get($referencePath);
+                $referenceBase64 = 'data:image/jpeg;base64,' . base64_encode($referenceBinary);
+                $photoBase64 = 'data:image/jpeg;base64,' . base64_encode($imageBinary);
+
+                $resp = Http::timeout(10)->post($flaskUrl . '/api/validate-face', [
+                    'photo' => $photoBase64,
+                    'reference_photo' => $referenceBase64,
+                ]);
+
+                if (!$resp->successful()) {
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Validasi wajah gagal (server Flask tidak merespon).',
+                    ], 502);
+                }
+
+                $body = $resp->json();
+                $distance = $body['distance'] ?? null;
+                $similarity = $body['similarity'] ?? null;
+                $match = $body['match'] ?? false;
+
+                $maxDistance = floatval(env('FACE_DISTANCE_THRESHOLD', 0.50));
+                $minSimilarity = floatval(env('FACE_MIN_SIMILARITY', 70.0));
+
+                $distanceFail = ($distance !== null) && ($distance >= $maxDistance);
+                $similarityFail = ($similarity !== null) && ($similarity < $minSimilarity);
+
+                if (!($body['success'] ?? false) || $distanceFail || $similarityFail) {
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json([
+                        'success' => false,
+                        'message' => $body['message'] ?? 'Wajah tidak cocok',
+                        'similarity' => $similarity,
+                        'distance' => $distance,
+                        'thresholds' => [
+                            'distance_max' => $maxDistance,
+                            'similarity_min' => $minSimilarity,
+                        ],
+                    ], 403);
+                }
+            } catch (\Exception $e) {
+                Storage::disk('public')->delete($finalRelative);
+                Log::error('Face validation error: ' . $e->getMessage());
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validasi wajah gagal diproses.',
+                ], 500);
+            }
+
             // Prevent duplicate presensi and enforce Masuk before Pulang
             $today = now()->toDateString();
             $hasMasuk = Presensi::where('nip', $pegawai->nip)->whereDate('tanggal_presensi', $today)->where('type', 'masuk')->exists();

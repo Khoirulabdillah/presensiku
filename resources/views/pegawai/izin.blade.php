@@ -355,7 +355,11 @@
             today.setHours(0, 0, 0, 0);
 
             if (startDate < today) {
-                alert('Tanggal mulai tidak boleh kurang dari hari ini.');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Tanggal tidak valid',
+                    text: 'Tanggal mulai tidak boleh kurang dari hari ini.',
+                });
                 this.value = '';
             }
         });
@@ -365,7 +369,11 @@
             const endDate = new Date(this.value);
 
             if (endDate < startDate) {
-                alert('Tanggal selesai tidak boleh kurang dari tanggal mulai.');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Tanggal tidak valid',
+                    text: 'Tanggal selesai tidak boleh kurang dari tanggal mulai.',
+                });
                 this.value = '';
             }
         });

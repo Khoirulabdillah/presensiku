@@ -47,6 +47,8 @@ class RegisteredUserController extends Controller
             'name' => $request->name,
             'username' => $request->username,
             'password' => Hash::make($request->password),
+            // Default every new registrant via this form as pegawai
+            'role' => 'pegawai',
         ]);
 
         // Create pegawai and link to created user. Note: pegawai table uses `users_id` as FK.
@@ -63,6 +65,7 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        return redirect(route('dashboard', absolute: false));
+        // Redirect sesuai role yang baru dibuat (pegawai)
+        return redirect()->route('pegawai.home');
     }
 }

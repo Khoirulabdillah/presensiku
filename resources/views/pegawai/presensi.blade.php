@@ -338,16 +338,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // keep last seen bbox for a short grace period to avoid blinking
     let lastSeenAt = 0;
     const HOLD_MS = 300;
+    // keep remote (Flask) detection alive for a short period to avoid immediate red status
+    let remoteHoldUntil = 0;
     let faceDetected = false;
     let isDetecting = false;
     let lastFaceBox = null; // store last fast-detection box for faster descriptor crop
 
     // Flask Face Detection API integration
     const FLASK_URL = "{{ env('FLASK_SERVER_URL', 'http://127.0.0.1:5000') }}";
+    // Expose to window for quick debugging via DevTools console
+    window.FLASK_URL = FLASK_URL;
     let flaskAvailable = false;
     let lastFlaskCheck = 0;
     let lastFlaskDetectAt = 0;
-    const FLASK_DETECT_COOLDOWN = 800; // ms between remote detections
+    // Interval antara pengiriman frame ke Flask (ms)
+    const FLASK_DETECT_COOLDOWN = 800;
 
         // server-side flags: has already presensi masuk/pulang
         const serverHasMasuk = @json($presensiMasuk ? true : false);
@@ -479,6 +484,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const data = await res.json();
             if (data.success && data.face_detected && data.face_count > 0) {
+                // hold green status briefly even if next local frame misses
+                remoteHoldUntil = performance.now() + 800;
+                // synthesize a simple bbox if none exists so overlay still shows a box
+                if (!lastFaceBox) {
+                    const ow = overlay.width || video.videoWidth || 640;
+                    const oh = overlay.height || video.videoHeight || 480;
+                    const bw = ow * 0.35;
+                    const bh = oh * 0.45;
+                    lastFaceBox = {
+                        x: (ow - bw) / 2,
+                        y: (oh - bh) / 2,
+                        width: bw,
+                        height: bh,
+                    };
+                }
                 return { detected: true, count: data.face_count };
             }
         } catch (e) {
@@ -654,11 +674,14 @@ document.addEventListener('DOMContentLoaded', function() {
         overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
         const now = performance.now();
         const seenRecently = (now - lastSeenAt) <= HOLD_MS && lastFaceBox;
+        const remoteHeld = now < remoteHoldUntil;
 
-        if (seenRecently) {
+        if (seenRecently || remoteHeld) {
             // smooth and draw
-            smoothedBox = lerpBox(smoothedBox, lastFaceBox, SMOOTHING);
-            drawBox(smoothedBox);
+            if (lastFaceBox) {
+                smoothedBox = lerpBox(smoothedBox, lastFaceBox, SMOOTHING);
+                drawBox(smoothedBox);
+            }
             faceDetected = true;
             faceStatus.textContent = 'Status: Wajah Terdeteksi';
             faceStatus.className = 'text-xs font-bold text-green-600';
@@ -713,7 +736,11 @@ document.addEventListener('DOMContentLoaded', function() {
             startBtn.classList.add('hidden');
             stopBtn.classList.remove('hidden');
         } catch (e) {
-            alert('Gagal akses kamera: ' + e.message);
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal akses kamera',
+                text: e?.message || 'Periksa izin kamera di browser.',
+            });
         }
     });
 
@@ -737,7 +764,11 @@ document.addEventListener('DOMContentLoaded', function() {
     async function captureAndSend(type) {
         // Pastikan wajah terdeteksi sebelum mengirim
         if (!faceDetected) {
-            alert('Wajah tidak terdeteksi. Pastikan kamera menangkap wajah dengan jelas.');
+            Swal.fire({
+                icon: 'warning',
+                title: 'Wajah tidak terdeteksi',
+                text: 'Pastikan wajah terlihat jelas di kamera.',
+            });
             return;
         }
 
@@ -795,7 +826,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('status-message').classList.remove('hidden');
                     setTimeout(() => location.reload(), 1100);
                 } else {
-                    alert('Gagal: ' + response.data.message);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal',
+                        text: response.data.message || 'Presensi gagal.',
+                    });
                     const statusText = document.getElementById('status-text');
                     let msg = response.data.message || 'Gagal';
                     if (response.data.distance !== undefined && response.data.distance !== null) {
@@ -811,21 +846,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById('status-message').classList.remove('hidden');
                 }
             } catch (err) {
-                alert('Error: ' + (err.response?.data?.message || 'Terjadi kesalahan sistem'));
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: err.response?.data?.message || 'Terjadi kesalahan sistem',
+                });
             } finally {
                 faceStatus.textContent = 'Status: Selesai';
             }
         }, (err) => {
             // Improve error messages for common geolocation failures
+            let geoMsg = 'Gagal mendapatkan lokasi. Harap aktifkan GPS Anda.';
             if (err.code === 1) {
-                alert('Izin lokasi ditolak. Aktifkan izin lokasi di browser dan akses situs melalui HTTPS.');
+                geoMsg = 'Izin lokasi ditolak. Aktifkan izin lokasi di browser dan akses situs melalui HTTPS.';
             } else if (err.code === 2) {
-                alert('Lokasi tidak dapat ditentukan. Pastikan perangkat Anda memiliki sinyal GPS atau koneksi internet.');
+                geoMsg = 'Lokasi tidak dapat ditentukan. Pastikan perangkat Anda memiliki sinyal GPS atau koneksi internet.';
             } else if (err.code === 3) {
-                alert('Timeout mendapatkan lokasi. Coba lagi atau periksa pengaturan lokasi.');
-            } else {
-                alert('Gagal mendapatkan lokasi. Harap aktifkan GPS Anda.');
+                geoMsg = 'Timeout mendapatkan lokasi. Coba lagi atau periksa pengaturan lokasi.';
             }
+            Swal.fire({
+                icon: 'warning',
+                title: 'Lokasi diperlukan',
+                text: geoMsg,
+            });
         });
     }
 
