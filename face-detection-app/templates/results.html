@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hasil Deteksi Wajah</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="results-header">
+            <h1>📸 Hasil Deteksi Wajah</h1>
+            <div class="face-count">
+                <span class="count-badge">{{ face_count }}</span>
+                <span class="count-label">{{ 'Wajah' if face_count == 1 else 'Wajah' }} Terdeteksi</span>
+            </div>
+        </div>
+
+        <div class="results-content">
+            <div class="image-container">
+                <h2>Gambar Hasil Deteksi</h2>
+                <img src="data:image/jpeg;base64,{{ image }}" alt="Hasil deteksi wajah" class="result-image">
+            </div>
+
+            {% if faces %}
+            <div class="faces-info">
+                <h2>Informasi Wajah Terdeteksi</h2>
+                <div class="faces-list">
+                    {% for face in faces %}
+                    <div class="face-item">
+                        <span class="face-number">Wajah #{{ loop.index }}</span>
+                        <ul>
+                            <li><strong>Posisi X:</strong> {{ face[0] }} px</li>
+                            <li><strong>Posisi Y:</strong> {{ face[1] }} px</li>
+                            <li><strong>Lebar:</strong> {{ face[2] }} px</li>
+                            <li><strong>Tinggi:</strong> {{ face[3] }} px</li>
+                        </ul>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="no-faces">
+                <p>❌ Tidak ada wajah yang terdeteksi dalam gambar ini.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="actions">
+            <a href="/" class="btn-back">← Coba Gambar Lain</a>
+        </div>
+    </div>
+</body>
+</html>

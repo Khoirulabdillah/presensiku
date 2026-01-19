@@ -33,4 +33,13 @@ class Pegawai extends Model
     {
         return $this->belongsTo(User::class, 'users_id');
     }
+    public function presensis()
+    {
+    // Karena foreign key-nya adalah 'nip'
+    return $this->hasMany(Presensi::class, 'nip', 'nip');
+    }
+    public function pegawai()
+    {
+    return $this->belongsTo(Pegawai::class, 'nip', 'nip');
+    }
 }

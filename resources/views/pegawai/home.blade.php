@@ -7,17 +7,7 @@
     {{-- Kartu Info Kehadiran --}}
     <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto -mt-14 p-4 sm:p-6 lg:p-8 transform transition duration-300 hover:shadow-2xl">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            {{-- Informasi Jadwal --}}
-            <div>
-                {{-- <p class="text-xl font-bold text-gray-800">Reguler</p> --}}
-                <p class="text-sm text-gray-500 mt-1" id="tanggal">Senin, 11 November 2025</p>
-                <p class="text-sm text-gray-600 mt-1">08.00 - 17.00 WIB</p>
-                <p class="text-md font-semibold text-green-600 mt-2">Masuk: 08:00</p>
-            </div>
-            {{-- Informasi Pulang --}}
-            <div class="text-left sm:text-right mt-2 sm:mt-0">
-                <p class="text-md font-semibold text-red-600">Pulang: 17:00</p>
-            </div>
+            
         </div>
 
         {{-- Statistik Kehadiran (Lebih Responsif) --}}

@@ -18,12 +18,17 @@ class Presensi extends Model
         'type',
         'latitude',
         'longitude',
+        'status',
+        'late_minutes',
+        'early_minutes',
     ];
 
     protected $casts = [
         'tanggal_presensi' => 'date',
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
+        'late_minutes' => 'integer',
+        'early_minutes' => 'integer',
     ];
 
     public function pegawai()

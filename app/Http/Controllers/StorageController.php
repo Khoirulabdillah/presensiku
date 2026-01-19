@@ -19,7 +19,7 @@ class StorageController extends Controller
             abort(404);
         }
 
-        $mime = Storage::disk('public')->mimeType($clean) ?? mime_content_type($full);
+        $mime = mime_content_type($full);
 
         return response()->file($full, ['Content-Type' => $mime]);
     }

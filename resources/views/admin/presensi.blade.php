@@ -15,6 +15,7 @@
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jam Masuk</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jam Pulang</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Latitude</th>
@@ -25,9 +26,10 @@
                 @forelse($presensis as $presensi)
                 <tr>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->nip }}</td>
-                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->pegawai->nama ?? 'N/A' }}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->pegawai->nama_pegawai ?? 'N/A' }}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->tanggal_presensi->format('d/m/Y') }}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ ucfirst($presensi->type) }}</td>
+                    <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->status }}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->jam_masuk }}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->jam_pulang }}</td>
                     <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{{ $presensi->latitude }}</td>

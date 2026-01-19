@@ -24,12 +24,6 @@
                     <i class="fas fa-calendar-alt text-white text-2xl mr-3"></i>
                     <div>
                         <h1 class="text-2xl font-bold text-white">Kelola Permohonan Izin</h1>
-                        <p class="text-blue-100 text-sm mt-1">
-                            <i class="fas fa-user mr-1"></i>{{ $pegawai->nama_pegawai }} ({{ $pegawai->nip }})
-                            @if($pegawai->jabatan)
-                                - {{ $pegawai->jabatan }}
-                            @endif
-                        </p>
                     </div>
                 </div>
             </div>
@@ -294,7 +288,7 @@
         });
 
         // Show selected section
-        document.getElementById('section-' + tabName).classList.remove('hidden');
+        document.getElementById('section-' + tabName).classList.remove('hidden');       
 
         // Activate selected tab
         event.target.classList.remove('bg-gray-100', 'text-gray-600');

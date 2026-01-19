@@ -14,6 +14,8 @@ class OfficeSetting extends Model
         'radius',
         'jam_masuk',
         'jam_pulang',
+        'batas_awal_masuk',
+        'toleransi_terlambat',
     ];
 
     protected $casts = [

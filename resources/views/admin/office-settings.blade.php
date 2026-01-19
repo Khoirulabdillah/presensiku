@@ -31,7 +31,7 @@
             <div class="space-y-4">
                 <div>
                     <label for="latitude" class="block text-sm font-medium text-gray-700">Latitude</label>
-                    <input type="number" step="any" id="latitude" name="latitude" value="{{ $officeSetting->latitude ?? '-7.7956' }}"
+                    <input type="text" id="latitude" name="latitude" value="{{ $officeSetting->latitude ?? '-7.7956' }}"
                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
                     @error('latitude')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -40,7 +40,7 @@
 
                 <div>
                     <label for="longitude" class="block text-sm font-medium text-gray-700">Longitude</label>
-                    <input type="number" step="any" id="longitude" name="longitude" value="{{ $officeSetting->longitude ?? '110.3695' }}"
+                    <input type="text" id="longitude" name="longitude" value="{{ $officeSetting->longitude ?? '110.3695' }}"
                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" required>
                     @error('longitude')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -126,17 +126,73 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('longitude').value = position.lng.toFixed(12);
     });
 
-    // Update marker position when inputs change
-    document.getElementById('latitude').addEventListener('input', updateMarker);
-    document.getElementById('longitude').addEventListener('input', updateMarker);
+    // Normalize coordinate string (allow comma decimals), trim
+    function normalizeCoordString(s) {
+        if (typeof s !== 'string') return '';
+        return s.replace(/,/g, '.').trim();
+    }
+
+    // Update marker position when inputs change (sanitize comma -> dot)
+    const latInput = document.getElementById('latitude');
+    const lngInput = document.getElementById('longitude');
+
+    latInput.addEventListener('input', function() {
+        // convert any comma decimals to dot for parsing and storage
+        this.value = this.value.replace(/,/g, '.');
+        updateMarker();
+    });
+
+    lngInput.addEventListener('input', function() {
+        this.value = this.value.replace(/,/g, '.');
+        updateMarker();
+    });
+
+    // Also respond to change/blur and Enter key so manual edits reliably update
+    [latInput, lngInput].forEach(function(el) {
+        el.addEventListener('change', function() {
+            this.value = this.value.replace(/,/g, '.').trim();
+            updateMarker();
+        });
+        el.addEventListener('blur', function() {
+            this.value = this.value.replace(/,/g, '.').trim();
+            updateMarker();
+        });
+        el.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.value = this.value.replace(/,/g, '.').trim();
+                updateMarker();
+            }
+        });
+    });
 
     function updateMarker() {
-        const lat = parseFloat(document.getElementById('latitude').value);
-        const lng = parseFloat(document.getElementById('longitude').value);
+        const rawLat = latInput.value;
+        const rawLng = lngInput.value;
+        const normLatStr = normalizeCoordString(rawLat);
+        const normLngStr = normalizeCoordString(rawLng);
+        const lat = parseFloat(normLatStr);
+        const lng = parseFloat(normLngStr);
+        // Debug logs to help diagnose manual input issues
+        console.debug('updateMarker raw:', { rawLat, rawLng });
+        console.debug('updateMarker normalized:', { normLatStr, normLngStr });
+        console.debug('updateMarker parsed:', { lat, lng });
+
         if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
             marker.setLatLng([lat, lng]);
             map.setView([lat, lng]);
+        } else {
+            console.warn('Invalid coordinates, marker not moved', { lat, lng });
         }
+    }
+
+    // Ensure values are sanitized before form submission
+    const officeForm = document.getElementById('office-settings-form');
+    if (officeForm) {
+        officeForm.addEventListener('submit', function() {
+            latInput.value = normalizeCoordString(latInput.value);
+            lngInput.value = normalizeCoordString(lngInput.value);
+        });
     }
     // Ensure map correctly renders tiles when container becomes visible
     setTimeout(() => {

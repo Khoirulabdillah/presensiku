@@ -16,6 +16,11 @@ return new class extends Migration
             $table->decimal('latitude', 10, 8);
             $table->decimal('longitude', 11, 8);
             $table->integer('radius')->default(50);
+            // jam kerja: jam masuk dan jam pulang
+            $table->time('jam_masuk')->nullable();
+            $table->time('jam_pulang')->nullable();
+            $table->integer('batas_awal_masuk')->default(30); // menit sebelum jam masuk
+            $table->integer('toleransi_terlambat')->default(15); // menit setelah jam masuk
             $table->timestamps();
         });
     }

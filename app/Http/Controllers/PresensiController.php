@@ -26,6 +26,12 @@ class PresensiController extends Controller
             return back()->withErrors(['error' => 'Data pegawai tidak ditemukan untuk akun ini.']);
         }
 
+        // AMBIL DATA PENGATURAN KANTOR (Jam Masuk, Pulang, dll)
+        $office = \App\Models\OfficeSetting::first();
+        if (!$office) {
+        return back()->withErrors(['error' => 'Pengaturan kantor belum diatur oleh admin.']);
+        }
+
         $today = now()->toDateString();
         $presensiHariIni = Presensi::where('nip', $pegawai->nip)
             ->whereDate('tanggal_presensi', $today)
@@ -35,14 +41,20 @@ class PresensiController extends Controller
         $presensiMasuk = $presensiHariIni->where('type', 'masuk')->first();
         $presensiPulang = $presensiHariIni->where('type', 'pulang')->first();
 
-        return view('pegawai.presensi', compact('pegawai', 'presensiMasuk', 'presensiPulang'));
+        return view('pegawai.presensi', compact('pegawai', 'presensiMasuk', 'presensiPulang','office'));
     }
 
     public function store(Request $request)
     {
         try {
             $user = Auth::user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized: user not authenticated.'], 401);
+            }
             $pegawai = Pegawai::where('users_id', $user->id)->first();
+            if (!$pegawai) {
+                return response()->json(['success' => false, 'message' => 'Data pegawai untuk user ini tidak ditemukan.'], 404);
+            }
 
             // Validate input (photo is base64 data URL)
             $validated = $request->validate([
@@ -66,6 +78,12 @@ class PresensiController extends Controller
             $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Ymd_His') . '.jpg';
             $finalRelative = $dir . '/' . $finalFilename;
             Storage::disk('public')->put($finalRelative, $imageBinary);
+
+            // verify file was saved
+            if (!Storage::disk('public')->exists($finalRelative)) {
+                Log::error('Presensi Error: saved file missing - ' . $finalRelative);
+                return response()->json(['success' => false, 'message' => 'Gagal menyimpan foto presensi. Periksa konfigurasi storage.'], 500);
+            }
 
             // Geofencing check (apply optional smaller override via env PRESENSI_MAX_RADIUS in meters)
             $office = OfficeSetting::first();
@@ -101,68 +119,104 @@ class PresensiController extends Controller
                 }
             }
 
-            // Persist presensi record
-            $data = [
-                'nip' => $pegawai->nip,
-                'tanggal_presensi' => now()->toDateString(),
-                'type' => $validated['type'],
-                'latitude' => $validated['latitude'],
-                'longitude' => $validated['longitude'],
-            ];
-
-            if ($validated['type'] === 'masuk') {
-                $data['jam_masuk'] = now()->format('H:i:s');
-                $data['foto_masuk'] = $finalRelative;
-            } else {
-                $data['jam_pulang'] = now()->format('H:i:s');
-                $data['foto_pulang'] = $finalRelative;
-            }
-
-            Presensi::create($data);
-
-            // Time window and lateness calculation
+            // determine status and minute deltas using office settings and Carbon
             $now = Carbon::now();
             $latenessMinutes = 0;
+            $earlyMinutes = 0;
             $statusNote = null;
-            if ($office && $office->jam_masuk) {
+
+            // parse office times
+            $jamMasuk = null;
+            $jamPulang = null;
+            $batasAwalMasuk = 0;
+            $toleransiTerlambat = 0;
+            if ($office) {
                 try {
-                    $jamMasuk = Carbon::parse($office->jam_masuk)->setDate($now->year, $now->month, $now->day);
+                    if ($office->jam_masuk) {
+                        $jamMasuk = Carbon::parse($office->jam_masuk)->setDate($now->year, $now->month, $now->day);
+                    }
                 } catch (\Exception $e) {
                     $jamMasuk = null;
                 }
-            } else {
-                $jamMasuk = null;
-            }
-            if ($office && $office->jam_pulang) {
                 try {
-                    $jamPulang = Carbon::parse($office->jam_pulang)->setDate($now->year, $now->month, $now->day);
+                    if ($office->jam_pulang) {
+                        $jamPulang = Carbon::parse($office->jam_pulang)->setDate($now->year, $now->month, $now->day);
+                    }
                 } catch (\Exception $e) {
                     $jamPulang = null;
                 }
-            } else {
-                $jamPulang = null;
+                $batasAwalMasuk = intval($office->batas_awal_masuk ?? 0);
+                $toleransiTerlambat = intval($office->toleransi_terlambat ?? 0);
             }
 
-            if ($validated['type'] === 'masuk' && $jamMasuk) {
-                if ($now->greaterThan($jamMasuk)) {
-                    $latenessMinutes = $jamMasuk->diffInMinutes($now);
-                    if ($latenessMinutes > 30) {
-                        $statusNote = 'terlambat_masuk';
+            if ($validated['type'] === 'masuk') {
+            if ($jamMasuk) {
+                $awalAbsen = $jamMasuk->copy()->subMinutes($batasAwalMasuk);
+                
+                // 1. Cek Batas Awal (Sudah benar)
+                if ($now->lt($awalAbsen)) {
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json(['success' => false, 'message' => 'Belum waktunya presensi masuk.'], 422);
+                }
+
+                // 2. Tentukan Batas Toleransi
+                $batasToleransi = $jamMasuk->copy()->addMinutes($toleransiTerlambat);
+
+                // 3. Logika Perbandingan (Perbaikan Utama)
+                if ($now->gt($batasToleransi)) {
+                    $statusNote = 'Terlambat';
+                    // Hitung menit keterlambatan (Waktu Sekarang - Jam Masuk)
+                    $latenessMinutes = $now->diffInMinutes($jamMasuk);
+                } else {
+                    $statusNote = 'Tepat Waktu';
+                    $latenessMinutes = 0;
+                }
+            } else {
+                $statusNote = 'Tepat Waktu';
+            }
+        }
+            if ($validated['type'] === 'pulang') {
+                if ($jamPulang) {
+                    if ($now->lt($jamPulang)) {
+                        $statusNote = 'Pulang Lebih Awal';
+                        $earlyMinutes = $jamPulang->diffInMinutes($now);
                     } else {
-                        $statusNote = 'tepat_waktu';
+                        $statusNote = 'Pulang';
+                        $earlyMinutes = 0;
                     }
                 } else {
-                    $statusNote = 'tepat_waktu';
+                    $statusNote = 'Pulang';
                 }
             }
-            if ($validated['type'] === 'pulang' && $jamPulang) {
-                if ($now->greaterThan($jamPulang)) {
-                    $latenessMinutes = $jamPulang->diffInMinutes($now);
-                    $statusNote = 'pulang_terlambat';
-                } else {
-                    $statusNote = 'pulang_tepat';
-                }
+
+            // Persist presensi record with computed status/minutes
+            $data = [
+                'nip' => $pegawai->nip,
+                'tanggal_presensi' => $now->toDateString(),
+                'type' => $validated['type'],
+                'latitude' => $validated['latitude'],
+                'longitude' => $validated['longitude'],
+                'status' => $statusNote,
+                'late_minutes' => $latenessMinutes,
+                'early_minutes' => $earlyMinutes,
+            ];
+
+            if ($validated['type'] === 'masuk') {
+                $data['jam_masuk'] = $now->format('H:i:s');
+                $data['foto_masuk'] = $finalRelative;
+            } else {
+                $data['jam_pulang'] = $now->format('H:i:s');
+                $data['foto_pulang'] = $finalRelative;
             }
+
+            $presensi = Presensi::updateOrCreate(
+                [
+                    'nip' => $pegawai->nip,
+                    'tanggal_presensi' => $now->toDateString(),
+                    'type' => $validated['type'],
+                ],
+                $data
+            );
 
             return response()->json([
                 'success' => true,
@@ -171,10 +225,11 @@ class PresensiController extends Controller
                 'distance' => $distance,
                 'status' => $statusNote,
                 'late_minutes' => $latenessMinutes,
+                'early_minutes' => $earlyMinutes,
             ]);
         } catch (\Exception $e) {
-            Log::error('Presensi Error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Kesalahan Sistem: ' . $e->getMessage()]);
+            Log::error('Presensi Error: ' . $e->getMessage() . '\n' . $e->getTraceAsString());
+            return response()->json(['success' => false, 'message' => 'Kesalahan Sistem: ' . $e->getMessage()], 500);
         }
     }
 
@@ -237,5 +292,21 @@ class PresensiController extends Controller
             if ($a[$i] !== $b[$i]) $dist++;
         }
         return $dist;
+    }
+
+    public function indexAdmin()
+    {
+        $presensis = Presensi::with('pegawai')->get();
+        return view('admin.presensi', compact('presensis'));
+    }
+
+    // Jika ingin mendapatkan hanya pegawai yang pernah presensi (tanpa duplikasi):
+    public function pegawaiYangPresesi()
+    {
+        $pegawais = Pegawai::whereHas('presensis')
+            ->distinct()
+            ->get();
+
+        return view('admin.pegawai-presensi', compact('pegawais'));
     }
 }

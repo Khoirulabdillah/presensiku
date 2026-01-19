@@ -90,6 +90,36 @@
     <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
         <h3 class="text-lg font-semibold text-gray-800 mb-6 text-center">Presensi dengan Kamera</h3>
 
+        {{-- Info Jam Kerja (di atas kamera) --}}
+        <div class="mb-4">
+            @if(isset($office) && $office)
+                @php
+                    $jamMasuk = $office->jam_masuk ? \Carbon\Carbon::parse($office->jam_masuk)->format('H:i') : '-';
+                    $jamPulang = $office->jam_pulang ? \Carbon\Carbon::parse($office->jam_pulang)->format('H:i') : '-';
+                    $batasAwal = ($office->jam_masuk && $office->batas_awal_masuk) ? \Carbon\Carbon::parse($office->jam_masuk)->subMinutes($office->batas_awal_masuk)->format('H:i') : '-';
+                    $batasToleransi = ($office->jam_masuk && $office->toleransi_terlambat) ? \Carbon\Carbon::parse($office->jam_masuk)->addMinutes($office->toleransi_terlambat)->format('H:i') : '-';
+                @endphp
+                <div class="bg-white/90 border border-gray-100 rounded-lg p-3 shadow-sm max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-4">
+                        <div class="px-3 py-2 bg-green-50 border border-green-100 rounded-md">
+                            <p class="text-xs text-gray-500">Jam Masuk</p>
+                            <p class="text-lg font-semibold text-green-700">{{ $jamMasuk }}</p>
+                        </div>
+                        <div class="px-3 py-2 bg-blue-50 border border-blue-100 rounded-md">
+                            <p class="text-xs text-gray-500">Jam Pulang</p>
+                            <p class="text-lg font-semibold text-blue-700">{{ $jamPulang }}</p>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-600 text-center sm:text-right">
+                        <div>Batas Awal Absen: <span class="font-medium">{{ $batasAwal }}</span> <span class="text-xs text-gray-400">({{ $office->batas_awal_masuk ?? 0 }} menit sebelum)</span></div>
+                        <div class="mt-1">Batas Toleransi: <span class="font-medium">{{ $batasToleransi }}</span> <span class="text-xs text-gray-400">({{ $office->toleransi_terlambat ?? 0 }} menit setelah)</span></div>
+                    </div>
+                </div>
+            @else
+                <div class="text-sm text-gray-500">Informasi jam kerja belum diatur.</div>
+            @endif
+        </div>
+
         <div class="mb-6">
             <div class="relative bg-gray-100 rounded-lg overflow-hidden" style="height: 400px;">
             <video id="camera" class="w-full h-full object-cover mirror" autoplay playsinline muted></video>
@@ -222,44 +252,30 @@ async function initAI() {
         faceModel = null;
     }
 
-<<<<<<< HEAD
-    if ('FaceDetector' in window) {
-        faceStatus.textContent = 'Status: Native detector tersedia';
-        faceStatus.className = 'text-xs font-bold text-green-600';
-    } else if (faceModel) {
-        faceStatus.textContent = 'Status: AI siap (BlazeFace)';
-        faceStatus.className = 'text-xs font-bold text-green-600';
-    } else {
-        faceStatus.textContent = 'Status: Fallback deteksi (skin-tone)';
-        faceStatus.className = 'text-xs font-bold text-yellow-600';
-=======
-    // Use a safe DOM lookup here because callers may define `faceStatus` in
-    // a different scope. Avoid ReferenceError by checking element existence.
-    const faceStatusEl = document.getElementById('face-status');
-    if (faceApiAvailable) {
-        if (faceStatusEl) {
-            faceStatusEl.textContent = 'Status: AI Siap';
-            faceStatusEl.className = 'text-xs font-bold text-green-600';
-        }
-    } else if (faceModel) {
-        if (faceStatusEl) {
-            faceStatusEl.textContent = 'Status: AI terbatas (deteksi saja)';
-            faceStatusEl.className = 'text-xs font-bold text-yellow-600';
-        }
-    } else if ('FaceDetector' in window) {
-        if (faceStatusEl) {
-            faceStatusEl.textContent = 'Status: AI terbatas (native detector)';
-            faceStatusEl.className = 'text-xs font-bold text-yellow-600';
-        }
-        window.__ai_load_report = window.__ai_load_report || {};
-        window.__ai_load_report.native = 'ok';
-    } else {
-        if (faceStatusEl) {
-            faceStatusEl.textContent = 'Status: Gagal memuat AI';
-            faceStatusEl.className = 'text-xs font-bold text-red-600';
-        }
->>>>>>> b7eac07 (yolloooo)
+const faceStatusEl = document.getElementById('face-status');
+if (faceApiAvailable) {
+    if (faceStatusEl) {
+        faceStatusEl.textContent = 'Status: AI Siap';
+        faceStatusEl.className = 'text-xs font-bold text-green-600';
     }
+} else if (faceModel) {
+    if (faceStatusEl) {
+        faceStatusEl.textContent = 'Status: AI terbatas (deteksi saja)';
+        faceStatusEl.className = 'text-xs font-bold text-yellow-600';
+    }
+} else if ('FaceDetector' in window) {
+    if (faceStatusEl) {
+        faceStatusEl.textContent = 'Status: AI terbatas (native detector)';
+        faceStatusEl.className = 'text-xs font-bold text-yellow-600';
+    }
+    window.__ai_load_report = window.__ai_load_report || {};
+    window.__ai_load_report.native = 'ok';
+} else {
+    if (faceStatusEl) {
+        faceStatusEl.textContent = 'Status: Gagal memuat AI';
+        faceStatusEl.className = 'text-xs font-bold text-red-600';
+    }
+}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -274,25 +290,201 @@ document.addEventListener('DOMContentLoaded', function() {
     let faceStatus = document.getElementById('face-status');
     let enableDetectCheckbox = document.getElementById('enable-detect');
     
+    // Simple toast helper
+    function showToast(message, type = 'info', timeout = 3500) {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.position = 'fixed';
+            container.style.zIndex = 99999;
+            container.style.top = '24px';
+            container.style.right = '24px';
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.gap = '8px';
+            document.body.appendChild(container);
+        }
+        const el = document.createElement('div');
+        el.textContent = message;
+        el.style.padding = '10px 14px';
+        el.style.borderRadius = '8px';
+        el.style.color = '#fff';
+        el.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
+        el.style.fontSize = '13px';
+        el.style.maxWidth = '320px';
+        el.style.wordBreak = 'break-word';
+        if (type === 'success') el.style.background = '#16a34a';
+        else if (type === 'warning') el.style.background = '#f59e0b';
+        else if (type === 'danger') el.style.background = '#dc2626';
+        else el.style.background = '#1f2937';
+        container.appendChild(el);
+        setTimeout(() => {
+            el.style.transition = 'opacity 220ms ease, transform 220ms ease';
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-6px)';
+            setTimeout(() => el.remove(), 240);
+        }, timeout);
+    }
+    
     let stream = null;
     let faceModel = null;
+    // scale of detection box relative to detected face bbox (0 < scale <= 1).
+    // Lower values produce a smaller green box around the face.
+    const FACE_BOX_SCALE = 0.4;
+    // smoothing factor for box movement (0 = no smoothing, 1 = instant)
+    const SMOOTHING = 0.25;
+    let smoothedBox = null;
+    // keep last seen bbox for a short grace period to avoid blinking
+    let lastSeenAt = 0;
+    const HOLD_MS = 300;
     let faceDetected = false;
     let isDetecting = false;
     let lastFaceBox = null; // store last fast-detection box for faster descriptor crop
 
+    // Flask Face Detection API integration
+    const FLASK_URL = "{{ env('FLASK_SERVER_URL', 'http://127.0.0.1:5000') }}";
+    let flaskAvailable = false;
+    let lastFlaskCheck = 0;
+    let lastFlaskDetectAt = 0;
+    const FLASK_DETECT_COOLDOWN = 800; // ms between remote detections
+
         // server-side flags: has already presensi masuk/pulang
         const serverHasMasuk = @json($presensiMasuk ? true : false);
         const serverHasPulang = @json($presensiPulang ? true : false);
+        // office settings from server (may be null)
+        const office = @json($office ?? null);
 
     // Timer
     setInterval(() => {
         document.getElementById('current-time').textContent = new Date().toLocaleTimeString('id-ID');
     }, 1000);
 
+    // Cek ketersediaan Flask Face Detection API
+    async function checkFlaskAvailability() {
+        const now = Date.now();
+        if (now - lastFlaskCheck < 5000) return flaskAvailable;
+        lastFlaskCheck = now;
+        try {
+            // kirim frame dummy kecil untuk ping API
+            const pingFrame = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z/C/HwAF/gL+u1rRygAAAABJRU5ErkJggg==';
+            const res = await fetch(`${FLASK_URL}/api/detect-face-frame`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame: pingFrame })
+            });
+            flaskAvailable = res.ok;
+        } catch (e) {
+            flaskAvailable = false;
+        }
+        return flaskAvailable;
+    }
+
+    // Dynamic work-time status checker (runs every second)
+    function parseTimeStringToDate(timeStr) {
+        if (!timeStr) return null;
+        // accept HH:MM:SS or HH:MM
+        const parts = timeStr.split(':').map(Number);
+        if (parts.length < 2) return null;
+        const now = new Date();
+        const hh = parts[0];
+        const mm = parts[1] || 0;
+        const ss = parts[2] || 0;
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, ss);
+    }
+
+    function updateWorkStatus() {
+        const statusContainer = document.getElementById('status-message');
+        const statusText = document.getElementById('status-text');
+        const masukBtn = document.getElementById('presensi-masuk');
+        const pulangBtn = document.getElementById('presensi-pulang');
+        if (!office || !office.jam_masuk) {
+            // hide
+            if (statusContainer) statusContainer.classList.add('hidden');
+            if (masukBtn) masukBtn.disabled = true;
+            if (pulangBtn) pulangBtn.disabled = true;
+            return;
+        }
+
+        const now = new Date();
+        const jamMasukDate = parseTimeStringToDate(office.jam_masuk);
+        const batasAwalMinutes = parseInt(office.batas_awal_masuk || 0, 10);
+        const toleransiMinutes = parseInt(office.toleransi_terlambat || 0, 10);
+        const awalAbsen = new Date(jamMasukDate.getTime() - batasAwalMinutes * 60000);
+        const batasToleransi = new Date(jamMasukDate.getTime() + toleransiMinutes * 60000);
+
+        // ensure visible
+        if (statusContainer) statusContainer.classList.remove('hidden');
+
+        if (now < awalAbsen) {
+            const mins = Math.ceil((awalAbsen - now) / 60000);
+            if (statusText) {
+                statusText.textContent = 'Absen belum dibuka. Kamera akan aktif dalam ' + mins + ' menit lagi.';
+                statusText.className = 'text-sm font-medium text-red-600';
+            }
+            if (masukBtn) masukBtn.disabled = true;
+            if (pulangBtn) pulangBtn.disabled = true;
+        } else if (now >= awalAbsen && now <= batasToleransi) {
+            if (statusText) {
+                statusText.textContent = 'Silakan absen sekarang. Status: Tepat Waktu';
+                statusText.className = 'text-sm font-medium text-green-600';
+            }
+            if (masukBtn) masukBtn.disabled = !!serverHasMasuk; // allow masuk only if not already
+            if (pulangBtn) pulangBtn.disabled = !serverHasMasuk || !!serverHasPulang; // pulang only after masuk
+        } else {
+            if (statusText) {
+                statusText.textContent = 'Status: Terlambat';
+                statusText.className = 'text-sm font-medium text-red-600';
+            }
+            if (masukBtn) masukBtn.disabled = !!serverHasMasuk;
+            if (pulangBtn) pulangBtn.disabled = !serverHasMasuk || !!serverHasPulang;
+        }
+    }
+
+    // run immediately and every second
+    updateWorkStatus();
+    setInterval(updateWorkStatus, 1000);
+
     // Load face-api models for descriptor computation and fallback blazeface for fast detection
     function resizeOverlay() {
         overlay.width = video.videoWidth || video.clientWidth || 640;
         overlay.height = video.videoHeight || video.clientHeight || 480;
+    }
+
+    // Deteksi melalui Flask API (remote) sebagai fallback/validasi
+    async function detectWithFlask() {
+        if (!enableDetectCheckbox.checked) return { detected: false };
+        if (!await checkFlaskAvailability()) return { detected: false };
+        const now = Date.now();
+        if (now - lastFlaskDetectAt < FLASK_DETECT_COOLDOWN) return { detected: false, throttled: true };
+        lastFlaskDetectAt = now;
+
+        try {
+            const w = 320;
+            const h = Math.max(240, Math.floor((video.videoHeight || 480) / (video.videoWidth || 640) * 320));
+            const tmp = document.createElement('canvas');
+            tmp.width = w; tmp.height = h;
+            const tctx = tmp.getContext('2d');
+            tctx.drawImage(video, 0, 0, w, h);
+            const frameBase64 = tmp.toDataURL('image/jpeg', 0.6);
+
+            const res = await fetch(`${FLASK_URL}/api/detect-face-frame`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ frame: frameBase64 })
+            });
+            if (!res.ok) {
+                flaskAvailable = false;
+                return { detected: false };
+            }
+            const data = await res.json();
+            if (data.success && data.face_detected && data.face_count > 0) {
+                return { detected: true, count: data.face_count };
+            }
+        } catch (e) {
+            console.warn('Flask detection error:', e);
+        }
+        return { detected: false };
     }
 
     // Simple detection loop WITHOUT TensorFlow (native FaceDetector or skin-tone)
@@ -301,14 +493,11 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
             const results = await detector.detect(video);
-            overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
             if (results && results.length > 0) {
                 const r = results[0].boundingBox;
                 const x = r.x, y = r.y, w = r.width, h = r.height;
-                overlayCtx.strokeStyle = '#10B981';
-                overlayCtx.lineWidth = 4;
-                overlayCtx.strokeRect(x, y, w, h);
-                lastFaceBox = { x, y, width: w, height: h };
+                // store raw bbox; drawing will be handled centrally in drawBox()
+                lastFaceBox = { x: x, y: y, width: w, height: h };
                 return true;
             }
             return false;
@@ -319,7 +508,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!faceModel) return false;
         try {
             const predictions = await faceModel.estimateFaces(video, false);
-            overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
             if (predictions && predictions.length > 0) {
                 const p = predictions[0];
                 let topLeft = p.topLeft;
@@ -330,10 +518,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     bottomRight = [bottomRight.x, bottomRight.y];
                 }
                 const x = topLeft[0], y = topLeft[1], w = bottomRight[0] - topLeft[0], h = bottomRight[1] - topLeft[1];
-                overlayCtx.strokeStyle = '#10B981';
-                overlayCtx.lineWidth = 4;
-                overlayCtx.strokeRect(x, y, w, h);
-                lastFaceBox = { x, y, width: w, height: h };
+                // store raw bbox; drawing will be handled centrally in drawBox()
+                lastFaceBox = { x: x, y: y, width: w, height: h };
                 return true;
             }
             return false;
@@ -361,12 +547,47 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }
-        if (count < 50) return null;
-        const scaleX = overlay.width / w, scaleY = overlay.height / h;
-        return { x: minX * scaleX, y: minY * scaleY, width: (maxX - minX) * scaleX, height: (maxY - minY) * scaleY };
+        // require enough skin pixels to reduce false positives
+        if (count < 300) return null;
+        // return bbox in video pixel coordinates (not already scaled to overlay)
+        const vW = video.videoWidth || video.clientWidth || overlay.width;
+        const vH = video.videoHeight || video.clientHeight || overlay.height;
+        const scaleX = vW / w, scaleY = vH / h;
+        const bx = minX * scaleX, by = minY * scaleY, bwidth = (maxX - minX) * scaleX, bheight = (maxY - minY) * scaleY;
+        // require reasonable size and centrality to be considered a face
+        const minDim = Math.min(vW, vH) * 0.08; // at least 8% of smaller dimension
+        const maxDim = Math.max(vW, vH) * 0.9;  // at most 90% of larger dimension
+        const cx = bx + bwidth / 2, cy = by + bheight / 2;
+        if (bwidth < minDim || bheight < minDim) return null;
+        if (bwidth > maxDim || bheight > maxDim) return null;
+        // central area check (within 90% central box)
+        if (cx < vW * 0.05 || cx > vW * 0.95 || cy < vH * 0.05 || cy > vH * 0.95) return null;
+        return { x: bx, y: by, width: bwidth, height: bheight };
     }
 
-    function drawBox(box) { overlayCtx.clearRect(0,0,overlay.width,overlay.height); if (!box) return; overlayCtx.strokeStyle='#10B981'; overlayCtx.lineWidth=4; overlayCtx.strokeRect(box.x, box.y, box.width, box.height); }
+    function lerpBox(a, b, t) {
+        if (!a) return { x: b.x, y: b.y, width: b.width, height: b.height };
+        return {
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+            width: a.width + (b.width - a.width) * t,
+            height: a.height + (b.height - a.height) * t
+        };
+    }
+
+    function drawBox(box) {
+        if (!box) return;
+        // shrink the provided box slightly for visual niceness
+        const cx = box.x + (box.width || 0) / 2;
+        const cy = box.y + (box.height || 0) / 2;
+        const nw = (box.width || 0) * FACE_BOX_SCALE;
+        const nh = (box.height || 0) * FACE_BOX_SCALE;
+        const nx = cx - nw / 2;
+        const ny = cy - nh / 2;
+        overlayCtx.strokeStyle='#10B981';
+        overlayCtx.lineWidth=4;
+        overlayCtx.strokeRect(nx, ny, nw, nh);
+    }
 
     async function simpleDetectLoop() {
         if (!isDetecting) return;
@@ -375,12 +596,8 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const ok = await detectWithFaceDetector();
                 if (ok) {
-                    faceDetected = true;
-                    faceStatus.textContent = 'Status: Wajah Terdeteksi';
-                    faceStatus.className = 'text-xs font-bold text-green-600';
-                    // enable buttons depending on server state
-                    presensiMasukBtn.disabled = serverHasMasuk ? true : false;
-                    presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+                    // mark last seen moment to hold box for a short period
+                    lastSeenAt = performance.now();
                     requestAnimationFrame(simpleDetectLoop);
                     return;
                 }
@@ -392,11 +609,8 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
                 const ok = await detectWithBlazeFace();
                 if (ok) {
-                    faceDetected = true;
-                    faceStatus.textContent = 'Status: Wajah Terdeteksi';
-                    faceStatus.className = 'text-xs font-bold text-green-600';
-                    presensiMasukBtn.disabled = serverHasMasuk ? true : false;
-                    presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+                    // mark last seen moment to hold box for a short period
+                    lastSeenAt = performance.now();
                     requestAnimationFrame(simpleDetectLoop);
                     return;
                 }
@@ -405,21 +619,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // skin-tone heuristic fallback
         const skinBox = detectWithSkinTone();
-            if (skinBox) {
-            	drawBox(skinBox);
-            	faceDetected = true;
-            	faceStatus.textContent = 'Status: Wajah Terdeteksi';
-            	faceStatus.className = 'text-xs font-bold text-green-600';
-            	presensiMasukBtn.disabled = serverHasMasuk ? true : false;
-            	presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+        if (skinBox) {
+            // store raw box (video coords) for centralized drawing
+            lastFaceBox = skinBox;
+            // mark last seen moment to hold box for a short period
+            lastSeenAt = performance.now();
+        }
+
+        // Jika semua deteksi lokal gagal, coba deteksi via Flask API (remote)
+        if (!lastFaceBox && enableDetectCheckbox.checked) {
+            const remote = await detectWithFlask();
+            if (remote.detected) {
+                faceDetected = true;
+                faceStatus.textContent = `Status: ${remote.count || 1} wajah terdeteksi (Flask)`;
+                faceStatus.className = 'text-xs font-bold text-green-600';
+                let allowMasukByTime = true;
+                try {
+                    if (office && office.jam_masuk) {
+                        const jamMasukDate = parseTimeStringToDate(office.jam_masuk);
+                        const batasAwalMinutes = parseInt(office.batas_awal_masuk || 0, 10);
+                        const awalAbsen = new Date(jamMasukDate.getTime() - batasAwalMinutes * 60000);
+                        if (new Date() < awalAbsen) allowMasukByTime = false;
+                    }
+                } catch (e) { allowMasukByTime = true; }
+                presensiMasukBtn.disabled = serverHasMasuk ? true : !allowMasukByTime;
+                presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
+                overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+                requestAnimationFrame(simpleDetectLoop);
+                return;
+            }
+        }
+
+        // central drawing logic: clear overlay once per frame
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+        const now = performance.now();
+        const seenRecently = (now - lastSeenAt) <= HOLD_MS && lastFaceBox;
+
+        if (seenRecently) {
+            // smooth and draw
+            smoothedBox = lerpBox(smoothedBox, lastFaceBox, SMOOTHING);
+            drawBox(smoothedBox);
+            faceDetected = true;
+            faceStatus.textContent = 'Status: Wajah Terdeteksi';
+            faceStatus.className = 'text-xs font-bold text-green-600';
+            // Respect time-window: do not enable masuk button if now < awalAbsen
+            let allowMasukByTime = true;
+            try {
+                if (office && office.jam_masuk) {
+                    const jamMasukDate = parseTimeStringToDate(office.jam_masuk);
+                    const batasAwalMinutes = parseInt(office.batas_awal_masuk || 0, 10);
+                    const awalAbsen = new Date(jamMasukDate.getTime() - batasAwalMinutes * 60000);
+                    if (new Date() < awalAbsen) allowMasukByTime = false;
+                }
+            } catch (e) { allowMasukByTime = true; }
+            presensiMasukBtn.disabled = serverHasMasuk ? true : !allowMasukByTime;
+            presensiPulangBtn.disabled = (serverHasMasuk && !serverHasPulang) ? false : true;
         } else {
-            overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+            // no face: clear overlay and reset smoothedBox
+            smoothedBox = null;
+            lastFaceBox = null;
             faceDetected = false;
             faceStatus.textContent = 'Status: Wajah Tidak Terlihat';
             faceStatus.className = 'text-xs font-bold text-red-600';
             presensiMasukBtn.disabled = true;
             presensiPulangBtn.disabled = true;
         }
+
         requestAnimationFrame(simpleDetectLoop);
     }
 
@@ -434,6 +699,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 try {
                     const libsOk = await ensureAIlibs();
                     await initAI();
+                    // Cek ketersediaan Flask API di background
+                    checkFlaskAvailability();
                     if (enableDetectCheckbox.checked) simpleDetectLoop();
                 } catch (e) {
                     console.warn('ensureAIlibs/initAI failed', e);
@@ -507,13 +774,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (response.data.distance !== undefined && response.data.distance !== null) {
                         msg += ' (jarak: ' + Math.round(response.data.distance) + ' m)';
                     }
-                    // show lateness info
                     if (response.data.status === 'terlambat_masuk' && response.data.late_minutes) {
                         msg += ' — Terlambat ' + response.data.late_minutes + ' menit';
                     }
-                    if (response.data.status === 'pulang_terlambat' && response.data.late_minutes) {
-                        msg += ' — Pulang terlambat ' + response.data.late_minutes + ' menit';
+
+                    // Show pulang-specific toast and append details to message when needed
+                    if (response.data.status === 'pulang_tepat') {
+                        showToast('Pulang tepat waktu', 'success');
+                    } else if (response.data.status === 'pulang_cepat') {
+                        const early = response.data.early_minutes || 0;
+                        showToast('Pulang cepat — ' + early + ' menit lebih awal', 'warning');
+                        msg += ' — Pulang cepat ' + early + ' menit';
+                    } else if (response.data.status === 'pulang_terlambat') {
+                        const late = response.data.late_minutes || 0;
+                        showToast('Pulang terlambat — ' + late + ' menit', 'danger');
+                        msg += ' — Pulang terlambat ' + late + ' menit';
                     }
+
                     statusText.textContent = msg;
                     document.getElementById('status-message').classList.remove('hidden');
                     setTimeout(() => location.reload(), 1100);

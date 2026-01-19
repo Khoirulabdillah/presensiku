@@ -32,10 +32,6 @@
             <i class="fas fa-map-marker-alt text-lg"></i>
             <span>Lokasi Kantor</span>
         </a>
-        <a href="{{ route('admin.setting-waktu.index') }}" class="flex items-center gap-3 py-2 px-4 rounded-xl hover:bg-blue-600 transition">
-            <i class="fa-solid fa-clock text-lg"></i>
-            <span>Seting Waktu</span>
-        </a>
     </nav>
 
     <!-- Logout -->
