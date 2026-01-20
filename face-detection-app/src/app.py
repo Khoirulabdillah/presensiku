@@ -182,5 +182,6 @@ def api_validate_face():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get('FLASK_SERVER_PORT', 5000))
+    # Railway menyediakan port lewat environment variable 'PORT'
+    port = int(os.environ.get('PORT', os.environ.get('FLASK_SERVER_PORT', 5000)))
     app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
