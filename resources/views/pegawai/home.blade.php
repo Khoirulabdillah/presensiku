@@ -3,75 +3,67 @@
 @section('title', 'Dashboard Pegawai')
 
 @section('content')
-<div class="container mx-auto px-4 md:px-8 lg:px-12 pb-10">
-    {{-- Kartu Info Kehadiran --}}
-    <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto -mt-14 p-4 sm:p-6 lg:p-8 transform transition duration-300 hover:shadow-2xl">
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    {{-- Header Greeting --}}
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="text-lg sm:text-2xl font-semibold text-gray-800">Halo, selamat datang</h1>
+            <p class="text-sm text-gray-500">Dashboard pegawai — ringkasan kehadiran Anda</p>
         </div>
+    </div>
 
-        {{-- Statistik Kehadiran (Lebih Responsif) --}}
-        <div class="flex justify-around text-center mt-6 pt-4 border-t border-gray-100">
-            <div class="w-1/3 p-1">
-                <p class="text-xl sm:text-2xl font-bold text-blue-600">{{ $hadir }}</p>
-                <p class="text-xs sm:text-sm text-gray-600">Hadir</p>
-                <div class="h-1 w-full bg-blue-600 mx-auto rounded-full mt-2"></div>
+    {{-- Kartu Info Kehadiran --}}
+    <div class="bg-white shadow-md rounded-2xl p-4 sm:p-6 mb-6">
+        <div class="grid grid-cols-3 sm:grid-cols-3 gap-4 text-center items-center">
+            <div class="p-3 rounded-lg bg-gradient-to-br from-blue-50 to-white">
+                <p class="text-2xl sm:text-3xl font-bold text-blue-600">{{ $hadir }}</p>
+                <p class="text-xs sm:text-sm text-gray-500">Hadir</p>
             </div>
-            
-            <div  class="w-1/3 p-1 border-l border-r border-gray-100 block">
-                <p class="text-xl sm:text-2xl font-bold text-yellow-500">{{ $izin }}</p>
-                <p class="text-xs sm:text-sm text-gray-600">Izin</p>
-                <div class="h-1 w-full bg-yellow-500 mx-auto rounded-full mt-2"></div>
+            <div class="p-3 rounded-lg bg-gradient-to-br from-yellow-50 to-white">
+                <p class="text-2xl sm:text-3xl font-bold text-yellow-500">{{ $izin }}</p>
+                <p class="text-xs sm:text-sm text-gray-500">Izin</p>
             </div>
-            <div class="w-1/3 p-1">
-                <p class="text-xl sm:text-2xl font-bold text-green-500">{{ $cuti }}</p>
-                <p class="text-xs sm:text-sm text-gray-600">Cuti</p>
-                <div class="h-1 w-full bg-green-500 mx-auto rounded-full mt-2"></div>
+            <div class="p-3 rounded-lg bg-gradient-to-br from-red-50 to-white">
+                <p class="text-2xl sm:text-3xl font-bold text-red-500">{{ $cuti }}</p>
+                <p class="text-xs sm:text-sm text-gray-500">Tidak Hadir</p>
             </div>
         </div>
     </div>
-    {{-- Akhir Kartu Info Kehadiran --}}
 
     {{-- Menu Utama --}}
-    <div class="mt-12 px-2 sm:px-4 lg:px-6 pb-24">
-        <h3 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Menu Utama</h3>
-        
-        {{-- Tata Letak Grid yang Dioptimalkan --}}
-        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-6 sm:gap-8">
-            
-            {{-- Menu Presensi --}}
-            <div class="flex flex-col items-center">
-                <a href="{{ route('pegawai.presensi.index') }}" class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
-                    <i class="fa-solid fa-camera text-3xl sm:text-4xl text-blue-600"></i>
-                </a>
-                <span class="text-sm sm:text-md font-medium text-gray-700 mt-2 text-center">Presensi</span>
-            </div>
+    <section class="mb-10">
+        <h3 class="text-lg sm:text-xl font-semibold text-gray-800 mb-4">Menu Utama</h3>
 
-            {{-- Menu Cuti --}}
-            <div class="flex flex-col items-center">
-                <a href="{{ route('pegawai.izin.create') }}" class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
-                    <i class="fa-solid fa-file-lines text-3xl sm:text-4xl text-yellow-600"></i>
-                </a>
-                <span class="text-sm sm:text-md font-medium text-gray-700 mt-2 text-center">Izin</span>
-            </div>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+            {{-- Presensi --}}
+            <a href="{{ route('pegawai.presensi.index') }}" class="group flex flex-col items-center bg-white rounded-2xl p-3 shadow-sm hover:shadow-md transform transition hover:-translate-y-1">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-xl bg-blue-50 group-hover:bg-blue-100 transition">
+                    <i class="fa-solid fa-camera text-2xl sm:text-3xl text-blue-600"></i>
+                </div>
+                <span class="mt-2 text-xs sm:text-sm font-medium text-gray-700 text-center">Presensi</span>
+            </a>
 
-            {{-- Menu Riwayat (Contoh Penambahan) --}}
-            <div class="flex flex-col items-center">
-                <a  class="bg-white shadow-lg rounded-2xl w-full max-w-[90px] h-20 sm:h-24 flex items-center justify-center transition hover:shadow-xl hover:scale-105 duration-200 aspect-square">
-                    <i class="fa-solid fa-clock-rotate-left text-3xl sm:text-4xl text-green-600"></i>
-                </a>
-                <span class="text-sm sm:text-md font-medium text-gray-700 mt-2 text-center">Riwayat Presensi</span>
-            </div>
+            {{-- Izin --}}
+            <a href="{{ route('pegawai.izin.create') }}" class="group flex flex-col items-center bg-white rounded-2xl p-3 shadow-sm hover:shadow-md transform transition hover:-translate-y-1">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-xl bg-yellow-50 group-hover:bg-yellow-100 transition">
+                    <i class="fa-solid fa-file-lines text-2xl sm:text-3xl text-yellow-600"></i>
+                </div>
+                <span class="mt-2 text-xs sm:text-sm font-medium text-gray-700 text-center">Izin</span>
+            </a>
+
+            {{-- Riwayat Presensi --}}
+            <a href="{{ route('pegawai.riwayat_presensi.index') }}" class="group flex flex-col items-center bg-white rounded-2xl p-3 shadow-sm hover:shadow-md transform transition hover:-translate-y-1">
+                <div class="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center rounded-xl bg-green-50 group-hover:bg-green-100 transition">
+                    <i class="fa-solid fa-clock-rotate-left text-2xl sm:text-3xl text-green-600"></i>
+                </div>
+                <span class="mt-2 text-xs sm:text-sm font-medium text-gray-700 text-center">Riwayat</span>
+            </a>
+
+            {{-- Placeholder / extensible items (fills grid nicely on larger screens) --}}
+            <div class="hidden md:flex items-center justify-center bg-transparent"></div>
+            <div class="hidden lg:flex items-center justify-center bg-transparent"></div>
+            <div class="hidden xl:flex items-center justify-center bg-transparent"></div>
         </div>
-    </div>
-            <!-- Logout -->
-        <form action="{{ route('logout') }}" method="POST" class="mt-auto">
-            @csrf
-            <button type="submit" class="flex items-center justify-center gap-3 w-full px-4 py-2 mt-4 bg-blue-800/80 hover:bg-red-600 transition rounded-xl">
-                <i class="fas fa-sign-out-alt text-lg"></i>
-                <span>Logout</span>
-            </button>
-        </form>
-    {{-- Akhir Menu Utama --}}
+    </section>
 </div>
 @endsection

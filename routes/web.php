@@ -53,6 +53,13 @@ Route::put('/admin/office-settings', [AdminController::class, 'updateOfficeSetti
 // Admin Presensi
 Route::get('/admin/presensi', [AdminController::class, 'presensi'])
     ->middleware(['auth', 'role:admin'])->name('admin.presensi.index');
+// Export routes (PDF / CSV)
+Route::get('/admin/presensi/export/pdf', [AdminController::class, 'exportPdf'])
+    ->middleware(['auth', 'role:admin'])->name('admin.presensi.exportPdf');
+Route::get('/admin/presensi/export/csv', [AdminController::class, 'exportCsv'])
+    ->middleware(['auth', 'role:admin'])->name('admin.presensi.exportCsv');
+Route::get('/admin/presensi/{id}/preview', [AdminController::class, 'presensiPreview'])
+    ->middleware(['auth', 'role:admin'])->name('admin.presensi.preview');
 
 // Admin Izin
 Route::get('/admin/izin', [AdminController::class, 'izin'])
@@ -85,6 +92,9 @@ Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'inde
 //Route presensi untuk pegawai
     Route::get('/pegawai/presensi', [PresensiController::class, 'index'])->middleware('auth')->name('pegawai.presensi.index');
     Route::post('/pegawai/presensi', [PresensiController::class, 'store'])->middleware('auth')->name('pegawai.presensi.store');
+
+//Route untuk riwayat presensi pegawai
+    Route::get('/pegawai/riwayat-presensi', [PresensiController::class, 'riwayatPresensi'])->middleware('auth')->name('pegawai.riwayat_presensi.index');
 
 // Serve storage images when public/storage symlink is not available
 Route::get('/storage/image/{path}', [StorageController::class, 'image'])->where('path', '.*')->name('storage.image');

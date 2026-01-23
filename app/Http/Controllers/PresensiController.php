@@ -356,10 +356,45 @@ class PresensiController extends Controller
         return $dist;
     }
 
-    public function indexAdmin()
+    public function indexAdmin(Request $request)
     {
-        $presensis = Presensi::with('pegawai')->get();
+        $query = Presensi::with('pegawai');
+
+        // Filter berdasarkan status
+        if ($request->has('status') && $request->status !== '') {
+            $query->where('status', $request->status);
+        }
+
+        // Filter berdasarkan type
+        if ($request->has('type') && $request->type !== '') {
+            $query->where('type', $request->type);
+        }
+
+        $presensis = $query->orderBy('tanggal_presensi', 'desc')->paginate(15);
         return view('admin.presensi', compact('presensis'));
+    }
+
+    /**
+     * Riwayat presensi untuk pegawai yang sedang login.
+     */
+    public function riwayatPresensi(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
+        $pegawai = Pegawai::with('divisi')->where('users_id', $user->id)->first();
+        if (!$pegawai) {
+            return redirect()->route('pegawai.home')->withErrors(['error' => 'Data pegawai tidak ditemukan.']);
+        }
+
+        $presensis = Presensi::where('nip', $pegawai->nip)
+            ->orderBy('tanggal_presensi', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->paginate(15);
+
+        return view('pegawai.riwayat-presensi', compact('presensis', 'pegawai'));
     }
 
     // Jika ingin mendapatkan hanya pegawai yang pernah presensi (tanpa duplikasi):

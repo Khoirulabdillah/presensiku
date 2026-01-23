@@ -17,25 +17,32 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="font-poppins bg-gradient-to-br from-blue-100 via-white to-blue-50 min-h-screen">
-    <div class="flex min-h-screen">
+    <div class="flex min-h-screen flex-col lg:flex-row">
         @if(auth()->check() && auth()->user()->role === 'admin')
             @include('layouts.admin_sidebar')
         @endif
 
         <!-- Main Content -->
-        <div class="flex-1 p-10 overflow-auto backdrop-blur-sm">
+        <div class="flex-1 flex flex-col w-full lg:overflow-auto">
             <!-- Header -->
-            <div class="flex justify-between items-center mb-10 border-b pb-4 border-gray-200">
-                <h2 class="text-3xl font-extrabold text-gray-800">@yield('title', 'Dashboard Presensi')</h2>
-                <div class="flex items-center gap-3">
-                    <i class="fa-solid fa-circle-user text-4xl text-blue-700"></i>
-                    {{-- <span class="font-semibold text-gray-700">{{ Auth::user()->name }}</span> --}}
+            <div class="bg-gradient-to-r from-blue-900 to-blue-700 text-white py-6 lg:py-8 px-4 lg:px-8 shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div class="flex-1">
+                        <h1 class="text-2xl lg:text-4xl font-bold">@yield('title', 'Dashboard')</h1>
+                    </div>
+                    @if(auth()->check() && auth()->user()->role === 'admin')
+                        <button id="sidebar-toggle" class="lg:hidden z-50 p-2 hover:bg-blue-800 rounded-lg transition ml-4">
+                            <i class="fas fa-bars text-2xl"></i>
+                        </button>
+                    @endif
                 </div>
             </div>
 
             <!-- Dynamic Content -->
-            <div id="content-area" class="rounded-2xl">
-                @yield('content')
+            <div class="flex-1 p-4 lg:p-10 overflow-auto">
+                <div id="content-area" class="rounded-2xl">
+                    @yield('content')
+                </div>
             </div>
         </div>
     </div>

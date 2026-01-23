@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             DivisiSeeder::class,
             UserSeeder::class,
             OfficeSettingSeeder::class,
+            \Database\Seeders\PresensiDummySeeder::class,
         ]);
     }
 }
