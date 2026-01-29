@@ -17,8 +17,12 @@
         <!-- Notifikasi Error Validasi -->
         @if ($errors->any())
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
-                <strong class="font-bold">Oops!</strong>
-                <span class="block sm:inline">Silakan perbaiki kesalahan input di bawah ini.</span>
+                <strong class="font-bold">Oops! Ada {{ $errors->count() }} kesalahan:</strong>
+                <ul class="mt-2 ml-4 list-disc list-inside text-sm">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
             </div>
         @endif
         
@@ -84,8 +88,6 @@
                 <!-- KOLOM KANAN - FORM AKUN -->
                 <div class="space-y-6">
                     <h3 class="text-lg font-semibold text-gray-700 border-b pb-2">Data Akun Login</h3>
-
-                    
 
                     <!-- USERNAME -->
                     <div>
@@ -171,13 +173,14 @@
 
                     <!-- INPUT FOTO -->
                     <div class="lg:col-span-2">
-                        <label for="foto_wajah_asli" class="block text-xs font-medium text-gray-700 mb-2">Pilih Foto (opsional)</label>
-                        <input type="file" name="foto_wajah_asli" id="foto_wajah_asli" accept="image/*"
+                        <label for="foto_wajah_asli" class="block text-xs font-medium text-gray-700 mb-2">Foto Wajah Referensi <span class="text-red-600 font-bold">*WAJIB</span></label>
+                        <input type="file" name="foto_wajah_asli" id="foto_wajah_asli" accept="image/*" required
                                class="w-full p-2 border border-gray-300 rounded-lg text-sm @error('foto_wajah_asli') border-red-500 @enderror">
-                        <p class="text-xs text-gray-500 mt-1">Format: JPG, PNG. Ukuran max: 5MB</p>
+                        <p class="text-xs text-gray-600 mt-1"><strong>Format:</strong> JPG, PNG | <strong>Max:</strong> 5MB</p>
+                        <p class="text-xs text-blue-600 mt-1">ℹ️ Foto digunakan untuk validasi wajah saat presensi. Pastikan wajah jelas dan menghadap kamera.</p>
                         <input type="hidden" name="foto_wajah_encoding" id="foto_wajah_encoding" />
                         @error('foto_wajah_asli')
-                            <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
+                            <p class="text-red-500 text-xs mt-2 font-semibold">❌ {{ $message }}</p>
                         @enderror
                     </div>
                 </div>

@@ -85,44 +85,37 @@ class PegawaiController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
             'username' => 'required|string|max:50|unique:users,username',
             'password' => 'required|confirmed|min:6',
             'nip' => 'required|string|unique:pegawai,nip|max:20',
             'nama_pegawai' => 'required|string|max:100',
             'jabatan' => 'required|string|max:50',
             'divisi_id' => 'required|exists:divisi,id',
-            'foto_wajah_asli' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'foto_wajah_asli' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:4096', // WAJIB untuk validasi wajah
             'foto_wajah_encoding' => 'nullable|string',
         ]);
 
         $user = User::create([
-            'name' => $validated['name'],
+            'name' => $validated['nama_pegawai'], // Gunakan nama_pegawai sebagai name
             'username' => $validated['username'],
             'password' => $validated['password'],
             'role' => 'pegawai',
         ]);
 
+        // Store foto WAJIB
+        $fotoPath = $request->file('foto_wajah_asli')->store('pegawai', 'public');
+        
         $pegawai = Pegawai::create([
             'divisi_id' => $validated['divisi_id'],
             'users_id' => $user->id,
             'nip' => $validated['nip'],
             'nama_pegawai' => $validated['nama_pegawai'],
             'jabatan' => $validated['jabatan'],
-            'foto_wajah_asli' => null,
-            'foto_wajah_encoding' => $request->input('foto_wajah_encoding') ? json_decode($request->input('foto_wajah_encoding'), true) : null,
+            'foto_wajah_asli' => $fotoPath, // WAJIB disimpan
+            'foto_wajah_encoding' => $request->filled('foto_wajah_encoding') ? json_decode($request->input('foto_wajah_encoding'), true) : null,
         ]);
 
-        if ($request->hasFile('foto_wajah_asli')) {
-            $path = $request->file('foto_wajah_asli')->store('pegawai', 'public');
-            $pegawai->update(['foto_wajah_asli' => $path]);
-            // if client provided encoding, keep it (admin create may compute it client-side)
-            if ($request->filled('foto_wajah_encoding')) {
-                $pegawai->update(['foto_wajah_encoding' => json_decode($request->input('foto_wajah_encoding'), true)]);
-            }
-        }
-
-        return redirect()->route('admin.pegawai.index')->with('success', 'Pegawai berhasil ditambahkan.');
+        return redirect()->route('admin.pegawai.index')->with('success', 'Pegawai berhasil ditambahkan dengan foto referensi.');
     }
 
     /**

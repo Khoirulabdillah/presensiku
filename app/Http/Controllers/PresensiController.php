@@ -98,53 +98,91 @@ class PresensiController extends Controller
                 }
             }
 
-            // Face validation
+            // Face validation - WAJIB untuk semua presensi
             $flaskUrl = rtrim(env('FLASK_SERVER_URL', 'http://127.0.0.1:5000'), '/');
             $referencePath = $pegawai->foto_wajah_asli;
             
-            // NOTE: Bagian ini opsional, jika pegawai belum punya foto referensi, bisa di-skip atau return error
-            if ($referencePath && Storage::disk('public')->exists($referencePath)) {
-                try {
-                    $referenceBinary = Storage::disk('public')->get($referencePath);
-                    $referenceBase64 = 'data:image/jpeg;base64,' . base64_encode($referenceBinary);
-                    $photoBase64 = 'data:image/jpeg;base64,' . base64_encode($imageBinary);
+            // Validasi foto referensi WAJIB ada
+            if (!$referencePath || !Storage::disk('public')->exists($referencePath)) {
+                Storage::disk('public')->delete($finalRelative);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Foto referensi pegawai belum tersedia. Hubungi admin untuk upload foto referensi.',
+                ], 422);
+            }
 
-                    $resp = Http::timeout(10)->post($flaskUrl . '/api/validate-face', [
-                        'photo' => $photoBase64,
-                        'reference_photo' => $referenceBase64,
-                    ]);
+            // Validasi wajah WAJIB dilakukan
+            try {
+                $referenceBinary = Storage::disk('public')->get($referencePath);
+                $referenceBase64 = 'data:image/jpeg;base64,' . base64_encode($referenceBinary);
+                $photoBase64 = 'data:image/jpeg;base64,' . base64_encode($imageBinary);
 
-                    if (!$resp->successful()) {
-                        // Jika server flask mati, bisa pilih lanjut atau error. Di sini error.
-                        Storage::disk('public')->delete($finalRelative);
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Validasi wajah gagal (server AI tidak merespon).',
-                        ], 502);
-                    }
+                // Increase timeout to 30 seconds for deployed servers (cold start)
+                $resp = Http::timeout(30)->post($flaskUrl . '/api/validate-face', [
+                    'photo' => $photoBase64,
+                    'reference_photo' => $referenceBase64,
+                ]);
 
-                    $body = $resp->json();
-                    $distance = $body['distance'] ?? null;
-                    $similarity = $body['similarity'] ?? null;
-                    
-                    $maxDistance = floatval(env('FACE_DISTANCE_THRESHOLD', 0.50));
-                    $minSimilarity = floatval(env('FACE_MIN_SIMILARITY', 70.0));
-
-                    $distanceFail = ($distance !== null) && ($distance >= $maxDistance);
-                    $similarityFail = ($similarity !== null) && ($similarity < $minSimilarity);
-
-                    if (!($body['success'] ?? false) || $distanceFail || $similarityFail) {
-                        Storage::disk('public')->delete($finalRelative);
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Wajah tidak cocok / tidak dikenali.',
-                            'similarity' => $similarity,
-                        ], 403);
-                    }
-                } catch (\Exception $e) {
-                     Log::error('Face validation error: ' . $e->getMessage());
-                     // Opsional: boleh return error atau bypass jika server AI bermasalah
+                if (!$resp->successful()) {
+                    Storage::disk('public')->delete($finalRelative);
+                    Log::error('Flask validation failed: ' . $resp->status() . ' - ' . $resp->body());
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Validasi wajah gagal (server AI tidak merespon). Status: ' . $resp->status(),
+                    ], 502);
                 }
+
+                $body = $resp->json();
+                
+                // Cek apakah Flask mengembalikan error (tidak ada wajah, dll)
+                if (!($body['success'] ?? false)) {
+                    Storage::disk('public')->delete($finalRelative);
+                    $errorMsg = $body['error'] ?? 'Validasi wajah gagal';
+                    return response()->json([
+                        'success' => false,
+                        'message' => $errorMsg,
+                    ], 403);
+                }
+                
+                $distance = $body['distance'] ?? null;
+                $similarity = $body['similarity'] ?? null;
+                
+                $maxDistance = floatval(env('FACE_DISTANCE_THRESHOLD', 0.55));
+                $minSimilarity = floatval(env('FACE_MIN_SIMILARITY', 40.0));
+
+                $distanceFail = ($distance !== null) && ($distance >= $maxDistance);
+                $similarityFail = ($similarity !== null) && ($similarity < $minSimilarity);
+
+                if ($distanceFail || $similarityFail) {
+                    Storage::disk('public')->delete($finalRelative);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Wajah tidak cocok dengan foto referensi.',
+                        'similarity' => $similarity,
+                        'distance' => $distance,
+                    ], 403);
+                }
+                
+                Log::info('Face validation success', [
+                    'nip' => $pegawai->nip,
+                    'similarity' => $similarity,
+                    'distance' => $distance
+                ]);
+                
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                 Log::error('Flask connection error: ' . $e->getMessage());
+                 Storage::disk('public')->delete($finalRelative);
+                 return response()->json([
+                     'success' => false,
+                     'message' => 'Tidak dapat terhubung ke server AI. Silakan coba lagi.',
+                 ], 502);
+            } catch (\Exception $e) {
+                 Log::error('Face validation error: ' . $e->getMessage());
+                 Storage::disk('public')->delete($finalRelative);
+                 return response()->json([
+                     'success' => false,
+                     'message' => 'Error validasi wajah: ' . $e->getMessage(),
+                 ], 500);
             }
 
             // Prevent duplicate presensi

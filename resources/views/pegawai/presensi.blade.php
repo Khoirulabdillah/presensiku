@@ -598,8 +598,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- FUNGSI KIRIM PRESENSI DENGAN LOADING ANIMATION ---
     async function captureAndSend(type) {
+        // Validasi 1: Wajah harus terdeteksi
         if (!faceDetected) {
             Swal.fire({ icon: 'warning', title: 'Wajah tidak terdeteksi', text: 'Pastikan wajah terlihat jelas di dalam kotak hijau.' });
+            return;
+        }
+
+        // Validasi 2: Kunci tombol agar tidak double-submit
+        if (isSubmitting) {
+            Swal.fire({ icon: 'warning', title: 'Sedang Diproses', text: 'Silakan tunggu...' });
             return;
         }
 
@@ -619,7 +626,8 @@ document.addEventListener('DOMContentLoaded', function() {
             isSubmitting = false;
             btn.innerHTML = originalText;
             faceStatus.textContent = 'Status: Wajah Terdeteksi';
-            // Loop simpleDetectLoop akan mengaktifkan tombol kembali di frame berikutnya jika wajah masih ada
+            presensiMasukBtn.disabled = false;
+            presensiPulangBtn.disabled = false;
         };
 
         // 2. Ambil Foto
@@ -629,10 +637,22 @@ document.addEventListener('DOMContentLoaded', function() {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const photoBase64 = canvas.toDataURL('image/jpeg', 0.7);
 
+        // Validasi 3: Foto harus berhasil dicapture
+        if (!photoBase64 || photoBase64.length < 100) {
+            Swal.fire({ icon: 'error', title: 'Gagal Capture', text: 'Tidak dapat mengambil foto. Silakan coba lagi.' });
+            resetUI();
+            return;
+        }
+
         // 3. Ambil Lokasi & Kirim
         const geoOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
         navigator.geolocation.getCurrentPosition(async (pos) => {
             try {
+                // Validasi 4: Lokasi harus valid
+                if (!pos.coords.latitude || !pos.coords.longitude) {
+                    throw new Error('Koordinat lokasi tidak valid');
+                }
+
                 const payload = {
                     photo: photoBase64,
                     type: type,
@@ -653,7 +673,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     resetUI(); // Kembalikan tombol agar bisa coba lagi
                 }
             } catch (err) {
-                Swal.fire({ icon: 'error', title: 'Error Sistem', text: err.response?.data?.message || 'Gagal menghubungi server' });
+                const errMsg = err.response?.data?.message || err.message || 'Gagal menghubungi server';
+                Swal.fire({ icon: 'error', title: 'Error Sistem', text: errMsg });
                 resetUI();
             }
         }, (err) => {
