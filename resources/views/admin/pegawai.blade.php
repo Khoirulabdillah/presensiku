@@ -5,11 +5,11 @@
 @section('content')
 
 <div class="bg-white shadow-xl rounded-2xl w-full max-w-6xl mx-auto p-6">
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex justify-between flex-col gap-1 items-left mb-6">
         <h3 class="text-2xl font-bold text-gray-800">Data Pegawai</h3>
-        <a href="{{ route('admin.pegawai.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
-            <i class="fas fa-plus mr-2"></i>Tambah Pegawai
-        </a>
+        <a href="{{ route('admin.pegawai.create') }}" class="bg-blue-600 hover:bg-blue-700 w-[200px] text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                <i class="fas fa-plus mr-2"></i>Tambah Pegawai
+            </a>
     </div>
 
     <!-- Filter Section -->

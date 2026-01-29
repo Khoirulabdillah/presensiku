@@ -23,7 +23,7 @@
         @endif
 
         <!-- Main Content -->
-        <div class="flex-1 flex flex-col w-full lg:overflow-auto">
+        <div class="flex-1 flex flex-col w-full lg:overflow-auto lg:ml-64">
             <!-- Header -->
             <div class="bg-gradient-to-r from-blue-900 to-blue-700 text-white py-6 lg:py-8 px-4 lg:px-8 shadow-lg">
                 <div class="flex items-center justify-between">

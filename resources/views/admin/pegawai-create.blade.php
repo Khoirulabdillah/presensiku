@@ -85,16 +85,7 @@
                 <div class="space-y-6">
                     <h3 class="text-lg font-semibold text-gray-700 border-b pb-2">Data Akun Login</h3>
 
-                    <!-- NAMA AKUN -->
-                    <div>
-                        <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Nama Akun</label>
-                        <input type="text" name="name" id="name" value="{{ old('name') }}" 
-                               placeholder="Nama pada akun login"
-                               class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-700 focus:border-blue-700 shadow-sm transition duration-150 ease-in-out @error('name') border-red-500 @enderror">
-                        @error('name')
-                            <p class="text-red-500 text-xs mt-1">{{ $message }}</p>
-                        @enderror
-                    </div>
+                    
 
                     <!-- USERNAME -->
                     <div>

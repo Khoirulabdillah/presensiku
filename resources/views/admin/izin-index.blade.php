@@ -17,10 +17,6 @@
                         <i class="fas fa-calendar-check text-white text-2xl mr-3"></i>
                         <h1 class="text-2xl font-bold text-white">Kelola Permohonan Izin</h1>
                     </div>
-                    <a href="{{ route('dashboard') }}"
-                       class="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-gray-100 transition duration-200">
-                        <i class="fas fa-arrow-left mr-2"></i>Kembali ke Dashboard
-                    </a>
                 </div>
             </div>
 

@@ -2,7 +2,7 @@
 <div id="sidebar-overlay" class="lg:hidden fixed inset-0 bg-black/50 z-[9998] hidden transition-opacity"></div>
 
 <!-- Sidebar -->
-<div id="sidebar" class="fixed lg:static top-0 left-0 z-[9999] w-64 h-screen lg:h-auto bg-gradient-to-b from-blue-900 to-blue-700 text-white p-5 flex flex-col shadow-2xl lg:shadow-none rounded-r-3xl lg:rounded-none transition-transform duration-300 -translate-x-full lg:translate-x-0">
+<div id="sidebar" class="fixed top-0 left-0 z-[9999] w-64 h-screen bg-gradient-to-b from-blue-900 to-blue-700 text-white p-5 flex flex-col shadow-2xl lg:shadow-none rounded-r-3xl lg:rounded-none transition-transform duration-300 -translate-x-full lg:translate-x-0">
     <!-- Close Button (Mobile) -->
     <button id="sidebar-close" class="lg:hidden absolute top-5 right-5 text-white hover:text-gray-200 transition">
         <i class="fas fa-times text-xl"></i>
