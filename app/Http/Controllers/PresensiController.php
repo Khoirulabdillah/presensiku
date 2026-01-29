@@ -29,7 +29,7 @@ class PresensiController extends Controller
         // AMBIL DATA PENGATURAN KANTOR (Jam Masuk, Pulang, dll)
         $office = \App\Models\OfficeSetting::first();
         if (!$office) {
-        return back()->withErrors(['error' => 'Pengaturan kantor belum diatur oleh admin.']);
+            return back()->withErrors(['error' => 'Pengaturan kantor belum diatur oleh admin.']);
         }
 
         $today = now()->toDateString();
@@ -41,7 +41,7 @@ class PresensiController extends Controller
         $presensiMasuk = $presensiHariIni->where('type', 'masuk')->first();
         $presensiPulang = $presensiHariIni->where('type', 'pulang')->first();
 
-        return view('pegawai.presensi', compact('pegawai', 'presensiMasuk', 'presensiPulang','office'));
+        return view('pegawai.presensi', compact('pegawai', 'presensiMasuk', 'presensiPulang', 'office'));
     }
 
     public function store(Request $request)
@@ -74,7 +74,7 @@ class PresensiController extends Controller
                 Storage::disk('public')->makeDirectory($dir);
             }
 
-            // Preview: don't save before checks? we'll save then delete if needed
+            // Filename generation
             $finalFilename = 'presensi_' . $pegawai->nip . '_' . $validated['type'] . '_' . now()->format('Ymd_His') . '.jpg';
             $finalRelative = $dir . '/' . $finalFilename;
             Storage::disk('public')->put($finalRelative, $imageBinary);
@@ -85,7 +85,7 @@ class PresensiController extends Controller
                 return response()->json(['success' => false, 'message' => 'Gagal menyimpan foto presensi. Periksa konfigurasi storage.'], 500);
             }
 
-            // Geofencing check (apply optional smaller override via env PRESENSI_MAX_RADIUS in meters)
+            // Geofencing check
             $office = OfficeSetting::first();
             $distance = null;
             if ($office) {
@@ -93,150 +93,118 @@ class PresensiController extends Controller
                 $overrideRadius = intval(env('PRESENSI_MAX_RADIUS', 200));
                 $effectiveRadius = min($office->radius ?? $overrideRadius, $overrideRadius);
                 if ($distance > $effectiveRadius) {
-                    // delete saved file
                     Storage::disk('public')->delete($finalRelative);
                     return response()->json(['success' => false, 'message' => 'Di luar radius kantor (' . round($distance) . 'm)', 'distance' => $distance], 403);
                 }
             }
 
-            // Face validation against reference photo (if available)
+            // Face validation
             $flaskUrl = rtrim(env('FLASK_SERVER_URL', 'http://127.0.0.1:5000'), '/');
             $referencePath = $pegawai->foto_wajah_asli;
-            if (!$referencePath || !Storage::disk('public')->exists($referencePath)) {
-                Storage::disk('public')->delete($finalRelative);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Foto referensi pegawai belum tersedia, hubungi admin.',
-                ], 422);
+            
+            // NOTE: Bagian ini opsional, jika pegawai belum punya foto referensi, bisa di-skip atau return error
+            if ($referencePath && Storage::disk('public')->exists($referencePath)) {
+                try {
+                    $referenceBinary = Storage::disk('public')->get($referencePath);
+                    $referenceBase64 = 'data:image/jpeg;base64,' . base64_encode($referenceBinary);
+                    $photoBase64 = 'data:image/jpeg;base64,' . base64_encode($imageBinary);
+
+                    $resp = Http::timeout(10)->post($flaskUrl . '/api/validate-face', [
+                        'photo' => $photoBase64,
+                        'reference_photo' => $referenceBase64,
+                    ]);
+
+                    if (!$resp->successful()) {
+                        // Jika server flask mati, bisa pilih lanjut atau error. Di sini error.
+                        Storage::disk('public')->delete($finalRelative);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Validasi wajah gagal (server AI tidak merespon).',
+                        ], 502);
+                    }
+
+                    $body = $resp->json();
+                    $distance = $body['distance'] ?? null;
+                    $similarity = $body['similarity'] ?? null;
+                    
+                    $maxDistance = floatval(env('FACE_DISTANCE_THRESHOLD', 0.50));
+                    $minSimilarity = floatval(env('FACE_MIN_SIMILARITY', 70.0));
+
+                    $distanceFail = ($distance !== null) && ($distance >= $maxDistance);
+                    $similarityFail = ($similarity !== null) && ($similarity < $minSimilarity);
+
+                    if (!($body['success'] ?? false) || $distanceFail || $similarityFail) {
+                        Storage::disk('public')->delete($finalRelative);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Wajah tidak cocok / tidak dikenali.',
+                            'similarity' => $similarity,
+                        ], 403);
+                    }
+                } catch (\Exception $e) {
+                     Log::error('Face validation error: ' . $e->getMessage());
+                     // Opsional: boleh return error atau bypass jika server AI bermasalah
+                }
             }
 
-            try {
-                $referenceBinary = Storage::disk('public')->get($referencePath);
-                $referenceBase64 = 'data:image/jpeg;base64,' . base64_encode($referenceBinary);
-                $photoBase64 = 'data:image/jpeg;base64,' . base64_encode($imageBinary);
-
-                $resp = Http::timeout(10)->post($flaskUrl . '/api/validate-face', [
-                    'photo' => $photoBase64,
-                    'reference_photo' => $referenceBase64,
-                ]);
-
-                if (!$resp->successful()) {
-                    Storage::disk('public')->delete($finalRelative);
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Validasi wajah gagal (server Flask tidak merespon).',
-                    ], 502);
-                }
-
-                $body = $resp->json();
-                $distance = $body['distance'] ?? null;
-                $similarity = $body['similarity'] ?? null;
-                $match = $body['match'] ?? false;
-
-                $maxDistance = floatval(env('FACE_DISTANCE_THRESHOLD', 0.50));
-                $minSimilarity = floatval(env('FACE_MIN_SIMILARITY', 70.0));
-
-                $distanceFail = ($distance !== null) && ($distance >= $maxDistance);
-                $similarityFail = ($similarity !== null) && ($similarity < $minSimilarity);
-
-                if (!($body['success'] ?? false) || $distanceFail || $similarityFail) {
-                    Storage::disk('public')->delete($finalRelative);
-                    return response()->json([
-                        'success' => false,
-                        'message' => $body['message'] ?? 'Wajah tidak cocok',
-                        'similarity' => $similarity,
-                        'distance' => $distance,
-                        'thresholds' => [
-                            'distance_max' => $maxDistance,
-                            'similarity_min' => $minSimilarity,
-                        ],
-                    ], 403);
-                }
-            } catch (\Exception $e) {
-                Storage::disk('public')->delete($finalRelative);
-                Log::error('Face validation error: ' . $e->getMessage());
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validasi wajah gagal diproses.',
-                ], 500);
-            }
-
-            // Prevent duplicate presensi and enforce Masuk before Pulang
+            // Prevent duplicate presensi
             $today = now()->toDateString();
             $hasMasuk = Presensi::where('nip', $pegawai->nip)->whereDate('tanggal_presensi', $today)->where('type', 'masuk')->exists();
             $hasPulang = Presensi::where('nip', $pegawai->nip)->whereDate('tanggal_presensi', $today)->where('type', 'pulang')->exists();
 
             if ($validated['type'] === 'masuk' && $hasMasuk) {
                 Storage::disk('public')->delete($finalRelative);
-                return response()->json(['success' => false, 'message' => 'Sudah melakukan presensi masuk pada hari ini.'], 422);
+                return response()->json(['success' => false, 'message' => 'Sudah melakukan presensi masuk hari ini.'], 422);
             }
             if ($validated['type'] === 'pulang') {
                 if (!$hasMasuk) {
                     Storage::disk('public')->delete($finalRelative);
-                    return response()->json(['success' => false, 'message' => 'Belum melakukan presensi masuk, tidak dapat melakukan presensi pulang.'], 422);
+                    return response()->json(['success' => false, 'message' => 'Belum presensi masuk.'], 422);
                 }
                 if ($hasPulang) {
                     Storage::disk('public')->delete($finalRelative);
-                    return response()->json(['success' => false, 'message' => 'Sudah melakukan presensi pulang pada hari ini.'], 422);
+                    return response()->json(['success' => false, 'message' => 'Sudah presensi pulang hari ini.'], 422);
                 }
             }
 
-            // determine status and minute deltas using office settings and Carbon
+            // Determine status
             $now = Carbon::now();
             $latenessMinutes = 0;
             $earlyMinutes = 0;
             $statusNote = null;
-
-            // parse office times
             $jamMasuk = null;
             $jamPulang = null;
             $batasAwalMasuk = 0;
             $toleransiTerlambat = 0;
+
             if ($office) {
                 try {
-                    if ($office->jam_masuk) {
-                        $jamMasuk = Carbon::parse($office->jam_masuk)->setDate($now->year, $now->month, $now->day);
-                    }
-                } catch (\Exception $e) {
-                    $jamMasuk = null;
-                }
-                try {
-                    if ($office->jam_pulang) {
-                        $jamPulang = Carbon::parse($office->jam_pulang)->setDate($now->year, $now->month, $now->day);
-                    }
-                } catch (\Exception $e) {
-                    $jamPulang = null;
-                }
+                    if ($office->jam_masuk) $jamMasuk = Carbon::parse($office->jam_masuk)->setDate($now->year, $now->month, $now->day);
+                    if ($office->jam_pulang) $jamPulang = Carbon::parse($office->jam_pulang)->setDate($now->year, $now->month, $now->day);
+                } catch (\Exception $e) {}
                 $batasAwalMasuk = intval($office->batas_awal_masuk ?? 0);
                 $toleransiTerlambat = intval($office->toleransi_terlambat ?? 0);
             }
 
             if ($validated['type'] === 'masuk') {
-            if ($jamMasuk) {
-                $awalAbsen = $jamMasuk->copy()->subMinutes($batasAwalMasuk);
-                
-                // 1. Cek Batas Awal (Sudah benar)
-                if ($now->lt($awalAbsen)) {
-                    Storage::disk('public')->delete($finalRelative);
-                    return response()->json(['success' => false, 'message' => 'Belum waktunya presensi masuk.'], 422);
-                }
-
-                // 2. Tentukan Batas Toleransi
-                $batasToleransi = $jamMasuk->copy()->addMinutes($toleransiTerlambat);
-
-                // 3. Logika Perbandingan (Perbaikan Utama)
-                if ($now->gt($batasToleransi)) {
-                    $statusNote = 'Terlambat';
-                    // Hitung menit keterlambatan (Waktu Sekarang - Jam Masuk)
-                    $latenessMinutes = $now->diffInMinutes($jamMasuk);
+                if ($jamMasuk) {
+                    $awalAbsen = $jamMasuk->copy()->subMinutes($batasAwalMasuk);
+                    if ($now->lt($awalAbsen)) {
+                        Storage::disk('public')->delete($finalRelative);
+                        return response()->json(['success' => false, 'message' => 'Belum waktunya presensi masuk.'], 422);
+                    }
+                    $batasToleransi = $jamMasuk->copy()->addMinutes($toleransiTerlambat);
+                    if ($now->gt($batasToleransi)) {
+                        $statusNote = 'Terlambat';
+                        $latenessMinutes = $now->diffInMinutes($jamMasuk);
+                    } else {
+                        $statusNote = 'Tepat Waktu';
+                    }
                 } else {
                     $statusNote = 'Tepat Waktu';
-                    $latenessMinutes = 0;
                 }
-            } else {
-                $statusNote = 'Tepat Waktu';
             }
-        }
+
             if ($validated['type'] === 'pulang') {
                 if ($jamPulang) {
                     if ($now->lt($jamPulang)) {
@@ -244,14 +212,13 @@ class PresensiController extends Controller
                         $earlyMinutes = $jamPulang->diffInMinutes($now);
                     } else {
                         $statusNote = 'Pulang';
-                        $earlyMinutes = 0;
                     }
                 } else {
                     $statusNote = 'Pulang';
                 }
             }
 
-            // Persist presensi record with computed status/minutes
+            // Prepare Data
             $data = [
                 'nip' => $pegawai->nip,
                 'tanggal_presensi' => $now->toDateString(),
@@ -263,15 +230,16 @@ class PresensiController extends Controller
                 'early_minutes' => $earlyMinutes,
             ];
 
+            // SIMPAN FOTO KE KOLOM YANG SESUAI
             if ($validated['type'] === 'masuk') {
                 $data['jam_masuk'] = $now->format('H:i:s');
-                $data['foto_masuk'] = $finalRelative;
+                $data['foto_masuk'] = $finalRelative; // Disimpan di kolom foto_masuk
             } else {
                 $data['jam_pulang'] = $now->format('H:i:s');
-                $data['foto_pulang'] = $finalRelative;
+                $data['foto_pulang'] = $finalRelative; // Disimpan di kolom foto_pulang
             }
 
-            $presensi = Presensi::updateOrCreate(
+            Presensi::updateOrCreate(
                 [
                     'nip' => $pegawai->nip,
                     'tanggal_presensi' => $now->toDateString(),
@@ -283,89 +251,52 @@ class PresensiController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Presensi berhasil dicatat.',
-                'face_match' => true,
-                'distance' => $distance,
-                'status' => $statusNote,
-                'late_minutes' => $latenessMinutes,
-                'early_minutes' => $earlyMinutes,
+                'status' => $statusNote
             ]);
+
         } catch (\Exception $e) {
-            Log::error('Presensi Error: ' . $e->getMessage() . '\n' . $e->getTraceAsString());
+            Log::error('Presensi Error: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Kesalahan Sistem: ' . $e->getMessage()], 500);
         }
     }
 
-    private function haversine($lat1, $lon1, $lat2, $lon2)
+    // --- METHOD BARU: UNTUK PREVIEW DATA DI ADMIN ---
+    // Ganti method preview yang lama dengan yang ini
+    public function preview($id)
     {
-        $earthRadius = 6371000;
-        $latDelta = deg2rad($lat2 - $lat1);
-        $lonDelta = deg2rad($lon2 - $lon1);
-        $a = sin($latDelta / 2) * sin($latDelta / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lonDelta / 2) * sin($lonDelta / 2);
-        return $earthRadius * (2 * atan2(sqrt($a), sqrt(1 - $a)));
-    }
-
-    // Compute average hash (aHash) for an image file path. Returns 64-bit bitstring like '0101...'
-    private function imageAHash($filePath)
-    {
-        if (!file_exists($filePath)) return null;
         try {
-            $data = file_get_contents($filePath);
-            if ($data === false) return null;
-            $img = @imagecreatefromstring($data);
-            if (!$img) return null;
-            // resize to 8x8
-            $w = imagesx($img);
-            $h = imagesy($img);
-            $thumb = imagecreatetruecolor(8, 8);
-            imagecopyresampled($thumb, $img, 0, 0, 0, 0, 8, 8, $w, $h);
-            // compute grayscale values
-            $total = 0;
-            $vals = [];
-            for ($y = 0; $y < 8; $y++) {
-                for ($x = 0; $x < 8; $x++) {
-                    $rgb = imagecolorat($thumb, $x, $y);
-                    $r = ($rgb >> 16) & 0xFF;
-                    $g = ($rgb >> 8) & 0xFF;
-                    $b = $rgb & 0xFF;
-                    $gray = (int)round(0.299 * $r + 0.587 * $g + 0.114 * $b);
-                    $vals[] = $gray;
-                    $total += $gray;
+            // 1. Ambil data presensi yang diklik (misal: data Pulang)
+            $presensi = Presensi::with(['pegawai', 'pegawai.divisi'])->findOrFail($id);
+
+            // 2. LOGIKA CERDAS: Fallback Foto
+            // Jika ini data PULANG, tapi foto_pulang KOSONG,
+            // Maka kita cari data MASUK di hari yang sama untuk mengambil fotonya.
+            if ($presensi->type === 'pulang' && empty($presensi->foto_pulang)) {
+                $presensiMasuk = Presensi::where('nip', $presensi->nip)
+                                    ->where('tanggal_presensi', $presensi->tanggal_presensi)
+                                    ->where('type', 'masuk')
+                                    ->first();
+                
+                // Jika ketemu data masuknya, kita "titipkan" fotonya ke variabel respon
+                if ($presensiMasuk && !empty($presensiMasuk->foto_masuk)) {
+                    $presensi->foto_masuk = $presensiMasuk->foto_masuk;
                 }
             }
-            imagedestroy($thumb);
-            imagedestroy($img);
-            $mean = $total / 64.0;
-            $bits = '';
-            foreach ($vals as $v) {
-                $bits .= ($v > $mean) ? '1' : '0';
-            }
-            return $bits;
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
 
-    private function hammingDistance($a, $b)
-    {
-        if ($a === null || $b === null) return PHP_INT_MAX;
-        if (strlen($a) !== strlen($b)) return PHP_INT_MAX;
-        $dist = 0;
-        for ($i = 0, $len = strlen($a); $i < $len; $i++) {
-            if ($a[$i] !== $b[$i]) $dist++;
+            return response()->json($presensi);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Data presensi tidak ditemukan.'], 404);
         }
-        return $dist;
     }
+    // ------------------------------------------------
 
     public function indexAdmin(Request $request)
     {
         $query = Presensi::with('pegawai');
 
-        // Filter berdasarkan status
         if ($request->has('status') && $request->status !== '') {
             $query->where('status', $request->status);
         }
-
-        // Filter berdasarkan type
         if ($request->has('type') && $request->type !== '') {
             $query->where('type', $request->type);
         }
@@ -374,20 +305,13 @@ class PresensiController extends Controller
         return view('admin.presensi', compact('presensis'));
     }
 
-    /**
-     * Riwayat presensi untuk pegawai yang sedang login.
-     */
     public function riwayatPresensi(Request $request)
     {
         $user = Auth::user();
-        if (!$user) {
-            return redirect()->route('login');
-        }
+        if (!$user) return redirect()->route('login');
 
         $pegawai = Pegawai::with('divisi')->where('users_id', $user->id)->first();
-        if (!$pegawai) {
-            return redirect()->route('pegawai.home')->withErrors(['error' => 'Data pegawai tidak ditemukan.']);
-        }
+        if (!$pegawai) return redirect()->route('pegawai.home');
 
         $presensis = Presensi::where('nip', $pegawai->nip)
             ->orderBy('tanggal_presensi', 'desc')
@@ -397,13 +321,13 @@ class PresensiController extends Controller
         return view('pegawai.riwayat-presensi', compact('presensis', 'pegawai'));
     }
 
-    // Jika ingin mendapatkan hanya pegawai yang pernah presensi (tanpa duplikasi):
-    public function pegawaiYangPresesi()
+    // Helper Functions
+    private function haversine($lat1, $lon1, $lat2, $lon2)
     {
-        $pegawais = Pegawai::whereHas('presensis')
-            ->distinct()
-            ->get();
-
-        return view('admin.pegawai-presensi', compact('pegawais'));
+        $earthRadius = 6371000;
+        $latDelta = deg2rad($lat2 - $lat1);
+        $lonDelta = deg2rad($lon2 - $lon1);
+        $a = sin($latDelta / 2) * sin($latDelta / 2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($lonDelta / 2) * sin($lonDelta / 2);
+        return $earthRadius * (2 * atan2(sqrt($a), sqrt(1 - $a)));
     }
 }

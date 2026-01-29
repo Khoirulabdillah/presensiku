@@ -221,9 +221,28 @@ class AdminController extends Controller
      */
     public function presensiPreview($id)
     {
+        // 1. Ambil data presensi
         $presensi = \App\Models\Presensi::with(['pegawai' => function ($q) {
             $q->with('divisi');
         }])->findOrFail($id);
+
+        // 2. LOGIKA PILIH FOTO (FIX)
+        // Cek dulu apakah ini data Masuk atau Pulang, ambil kolom yang sesuai
+        $fileFoto = ($presensi->type === 'masuk') ? $presensi->foto_masuk : $presensi->foto_pulang;
+
+        // 3. LOGIKA FALLBACK (PEMINJAMAN FOTO)
+        // Jika ini data PULANG tapi fotonya kosong, cari data MASUK di hari yang sama
+        if ($presensi->type === 'pulang' && empty($fileFoto)) {
+            $dataMasuk = \App\Models\Presensi::where('nip', $presensi->nip)
+                ->where('tanggal_presensi', $presensi->tanggal_presensi)
+                ->where('type', 'masuk')
+                ->first();
+            
+            // Jika ketemu data masuknya, pakai foto masuk
+            if ($dataMasuk && !empty($dataMasuk->foto_masuk)) {
+                $fileFoto = $dataMasuk->foto_masuk;
+            }
+        }
 
         return response()->json([
             'id' => $presensi->id,
@@ -235,7 +254,10 @@ class AdminController extends Controller
             'jam_pulang' => $presensi->jam_pulang,
             'latitude' => $presensi->latitude,
             'longitude' => $presensi->longitude,
-            'foto_presensi' => $presensi->foto_presensi,
+            
+            // PENTING: Kirim sebagai 'foto_masuk' karena JavaScript Anda menunggunya dengan nama ini
+            'foto_masuk' => $fileFoto, 
+            
             'pegawai' => [
                 'nip' => $presensi->pegawai->nip ?? '-',
                 'nama_pegawai' => $presensi->pegawai->nama_pegawai ?? '-',

@@ -7,7 +7,6 @@
 <div class="bg-white shadow-xl rounded-2xl w-full max-w-6xl mx-auto p-6">
     <h3 class="text-2xl font-bold text-gray-800 mb-6">Data Presensi</h3>
 
-    <!-- Filter Section -->
     <div class="mb-6">
         <form method="GET" action="{{ route('admin.presensi.index') }}" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -41,9 +40,7 @@
                         <i class="fas fa-redo"></i>
                         Reset
                     </a>
-                    <!-- Export buttons -->
                     @php $qs = request()->getQueryString(); $qs = $qs ? ('?'.$qs) : ''; @endphp
-                    <!-- Excel export removed; keep PDF and CSV -->
                     <a href="{{ route('admin.presensi.exportPdf') }}{{ $qs }}" class="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-medium">
                         <i class="fas fa-file-pdf"></i>
                         PDF
@@ -112,7 +109,7 @@
                     @endforeach
                 @else
                     <tr>
-                        <td colspan="9" class="px-4 py-8 text-center">
+                        <td colspan="8" class="px-4 py-8 text-center">
                             <div class="text-gray-500">
                                 <i class="fas fa-inbox text-4xl mb-2 block opacity-50"></i>
                                 <p class="text-sm font-medium">Tidak ada data presensi</p>
@@ -125,19 +122,15 @@
         </table>
     </div>
 
-    <!-- Pagination -->
     <div class="mt-6 flex justify-center">
         {{ $presensis->appends(request()->query())->links() }}
     </div>
 </div>
 
-
 @endsection
 
-<!-- Modal Preview -->
 <div id="previewModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <!-- Header -->
         <div class="sticky top-0 bg-gradient-to-r from-blue-900 to-blue-700 text-white p-6 rounded-t-2xl flex items-center justify-between">
             <h2 class="text-2xl font-bold">Detail Presensi</h2>
             <button type="button" onclick="closePreviewModal()" class="hover:bg-white/20 p-2 rounded-lg transition">
@@ -145,32 +138,28 @@
             </button>
         </div>
 
-        <!-- Content -->
         <div class="p-6 space-y-6">
-            <!-- Loading State -->
             <div id="modalLoading" class="flex justify-center items-center py-8">
                 <div class="animate-spin">
                     <i class="fas fa-spinner text-3xl text-blue-500"></i>
                 </div>
             </div>
 
-            <!-- Data Content (Hidden initially) -->
             <div id="modalContent" class="hidden space-y-6">
-                <!-- Foto Section -->
                 <div>
                     <h3 class="text-lg font-semibold text-gray-700 mb-3">Foto Presensi</h3>
-                    <div id="fotoContainer" class="bg-gray-100 rounded-xl overflow-hidden">
+                    
+                    <div id="fotoContainer" class="hidden bg-gray-100 rounded-xl overflow-hidden">
                         <img id="fotoPresensi" src="" alt="Foto Presensi" class="w-full h-auto object-cover max-h-96">
                     </div>
-                    <p id="fotoNotAvailable" class="text-gray-500 text-center py-8">
+                    
+                    <p id="fotoNotAvailable" class="hidden text-gray-500 text-center py-8">
                         <i class="fas fa-image text-4xl block mb-2 opacity-50"></i>
                         Tidak ada foto tersedia
                     </p>
                 </div>
 
-                <!-- Info Section -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Pegawai Info -->
                     <div>
                         <h4 class="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b">Data Pegawai</h4>
                         <div class="space-y-2 text-sm">
@@ -193,7 +182,6 @@
                         </div>
                     </div>
 
-                    <!-- Presensi Info -->
                     <div>
                         <h4 class="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b">Data Presensi</h4>
                         <div class="space-y-2 text-sm">
@@ -217,7 +205,6 @@
                     </div>
                 </div>
 
-                <!-- Location Info -->
                 <div>
                     <h4 class="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b">Lokasi Presensi</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -236,7 +223,6 @@
                     </div>
                 </div>
 
-                <!-- Jam Pulang -->
                 <div>
                     <h4 class="text-sm font-semibold text-gray-700 mb-3 pb-2 border-b">Jam Pulang</h4>
                     <div class="text-sm">
@@ -281,13 +267,16 @@
                 document.getElementById('detailLatitude').textContent = data.latitude || '-';
                 document.getElementById('detailLongitude').textContent = data.longitude || '-';
 
-                // Handle foto
+                // Handle foto (DIPERBAIKI)
                 const fotoContainer = document.getElementById('fotoContainer');
                 const fotoImage = document.getElementById('fotoPresensi');
                 const fotoNotAvailable = document.getElementById('fotoNotAvailable');
 
-                if (data.foto_presensi) {
-                    fotoImage.src = `/storage/presensi/${data.foto_presensi}`;
+                // Gunakan 'foto_masuk' sesuai database, dan format path yang benar
+                if (data.foto_masuk) {
+                    // Gunakan /storage/ + path dari database (misal: presensi/file.jpg)
+                    fotoImage.src = `/storage/${data.foto_masuk}`;
+                    
                     fotoContainer.classList.remove('hidden');
                     fotoNotAvailable.classList.add('hidden');
                 } else {
