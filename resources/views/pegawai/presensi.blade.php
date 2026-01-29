@@ -26,9 +26,91 @@
         </div>
     </div>
 
-    {{-- Status Presensi Hari Ini --}}
+
+
+    {{-- Camera Interface --}}
+    <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+        <h3 class="text-lg font-semibold text-gray-800 mb-6 text-center">Presensi dengan Kamera</h3>
+
+        {{-- Info Jam Kerja (di atas kamera) --}}
+        <div class="mb-4">
+            @if(isset($office) && $office)
+                @php
+                    $jamMasuk = $office->jam_masuk ? \Carbon\Carbon::parse($office->jam_masuk)->format('H:i') : '-';
+                    $jamPulang = $office->jam_pulang ? \Carbon\Carbon::parse($office->jam_pulang)->format('H:i') : '-';
+                    $batasAwal = ($office->jam_masuk && $office->batas_awal_masuk) ? \Carbon\Carbon::parse($office->jam_masuk)->subMinutes((int)$office->batas_awal_masuk)->format('H:i') : '-';
+                    $batasToleransi = ($office->jam_masuk && $office->toleransi_terlambat) ? \Carbon\Carbon::parse($office->jam_masuk)->addMinutes((int)$office->toleransi_terlambat)->format('H:i') : '-';
+                @endphp
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 sm:p-4 shadow-sm">
+                    <div class="grid grid-cols-2 gap-2 sm:gap-3">
+                        <div class="bg-white rounded-md p-2 sm:p-3 shadow-xs border border-blue-100">
+                            <p class="text-xs text-gray-600 font-semibold uppercase tracking-wide">Jam Masuk</p>
+                            <p class="text-lg sm:text-xl font-bold text-blue-600 mt-1">{{ $jamMasuk }}</p>
+                        </div>
+                        <div class="bg-white rounded-md p-2 sm:p-3 shadow-xs border border-indigo-100">
+                            <p class="text-xs text-gray-600 font-semibold uppercase tracking-wide">Jam Pulang</p>
+                            <p class="text-lg sm:text-xl font-bold text-indigo-600 mt-1">{{ $jamPulang }}</p>
+                        </div>
+                        <div class="bg-white rounded-md p-2 sm:p-3 shadow-xs border border-amber-100">
+                            <p class="text-xs text-gray-600 font-semibold uppercase tracking-wide">Batas Awal</p>
+                            <p class="text-lg sm:text-xl font-bold text-amber-600 mt-1">{{ $batasAwal }}</p>
+                        </div>
+                        <div class="bg-white rounded-md p-2 sm:p-3 shadow-xs border border-emerald-100">
+                            <p class="text-xs text-gray-600 font-semibold uppercase tracking-wide">Toleransi</p>
+                            <p class="text-lg sm:text-xl font-bold text-emerald-600 mt-1">{{ $batasToleransi }}</p>
+                        </div>
+                    </div>
+                </div>
+            @else
+                <div class="text-sm text-gray-500">Informasi jam kerja belum diatur.</div>
+            @endif
+        </div>
+
+        <div class="mb-6">
+            <div class="relative bg-gray-100 rounded-lg overflow-hidden" style="height: 400px;">
+            <video id="camera" class="w-full h-full object-cover mirror" autoplay playsinline muted></video>
+            <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none mirror"></canvas>
+                <canvas id="canvas" class="hidden"></canvas>
+
+                {{-- Camera Controls --}}
+                <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4">
+                    <button id="start-camera" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button id="stop-camera" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hidden">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                </div>
+
+                <div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-md text-sm shadow-sm flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="enable-detect" checked />
+                        <span class="font-medium">Deteksi Wajah</span>
+                    </div>
+                    <div id="face-status" class="text-xs font-bold text-gray-600">Status: Memuat AI...</div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Presensi Actions --}}
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <button id="presensi-masuk" class="bg-green-600 hover:bg-green-700 justify-center text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
+                <i class="fas fa-sign-in-alt"></i> <span>Presensi Masuk</span>
+            </button>
+
+            <button id="presensi-pulang" class="bg-blue-600 hover:bg-blue-700 justify-center text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
+                <i class="fas fa-sign-out-alt"></i> <span>Presensi Pulang</span>
+            </button>
+        </div>
+
+        <div id="status-message" class="mt-4 text-center hidden">
+            <p id="status-text" class="text-sm font-medium"></p>
+        </div>
+    </div>
+
+        {{-- Status Presensi Hari Ini --}}
     @if($presensiMasuk || $presensiPulang)
-    <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 mb-6">
+    <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto mt-4 p-4 sm:p-6 lg:p-8 mb-6">
         <h3 class="text-lg font-semibold text-gray-800 mb-4">Status Presensi Hari Ini</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             @if($presensiMasuk)
@@ -85,82 +167,6 @@
         </div>
     </div>
     @endif
-
-    {{-- Camera Interface --}}
-    <div class="bg-white shadow-xl rounded-2xl w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
-        <h3 class="text-lg font-semibold text-gray-800 mb-6 text-center">Presensi dengan Kamera</h3>
-
-        {{-- Info Jam Kerja (di atas kamera) --}}
-        <div class="mb-4">
-            @if(isset($office) && $office)
-                @php
-                    $jamMasuk = $office->jam_masuk ? \Carbon\Carbon::parse($office->jam_masuk)->format('H:i') : '-';
-                    $jamPulang = $office->jam_pulang ? \Carbon\Carbon::parse($office->jam_pulang)->format('H:i') : '-';
-                    $batasAwal = ($office->jam_masuk && $office->batas_awal_masuk) ? \Carbon\Carbon::parse($office->jam_masuk)->subMinutes((int)$office->batas_awal_masuk)->format('H:i') : '-';
-                    $batasToleransi = ($office->jam_masuk && $office->toleransi_terlambat) ? \Carbon\Carbon::parse($office->jam_masuk)->addMinutes((int)$office->toleransi_terlambat)->format('H:i') : '-';
-                @endphp
-                <div class="bg-white/90 border border-gray-100 rounded-lg p-3 shadow-sm max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <div class="flex items-center gap-4">
-                        <div class="px-3 py-2 bg-green-50 border border-green-100 rounded-md">
-                            <p class="text-xs text-gray-500">Jam Masuk</p>
-                            <p class="text-lg font-semibold text-green-700">{{ $jamMasuk }}</p>
-                        </div>
-                        <div class="px-3 py-2 bg-blue-50 border border-blue-100 rounded-md">
-                            <p class="text-xs text-gray-500">Jam Pulang</p>
-                            <p class="text-lg font-semibold text-blue-700">{{ $jamPulang }}</p>
-                        </div>
-                    </div>
-                    <div class="text-sm text-gray-600 text-center sm:text-right">
-                        <div>Batas Awal Absen: <span class="font-medium">{{ $batasAwal }}</span> <span class="text-xs text-gray-400">({{ $office->batas_awal_masuk ?? 0 }} menit sebelum)</span></div>
-                        <div class="mt-1">Batas Toleransi: <span class="font-medium">{{ $batasToleransi }}</span> <span class="text-xs text-gray-400">({{ $office->toleransi_terlambat ?? 0 }} menit setelah)</span></div>
-                    </div>
-                </div>
-            @else
-                <div class="text-sm text-gray-500">Informasi jam kerja belum diatur.</div>
-            @endif
-        </div>
-
-        <div class="mb-6">
-            <div class="relative bg-gray-100 rounded-lg overflow-hidden" style="height: 400px;">
-            <video id="camera" class="w-full h-full object-cover mirror" autoplay playsinline muted></video>
-            <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none mirror"></canvas>
-                <canvas id="canvas" class="hidden"></canvas>
-
-                {{-- Camera Controls --}}
-                <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-4">
-                    <button id="start-camera" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-                        <i class="fas fa-play"></i>
-                    </button>
-                    <button id="stop-camera" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 hidden">
-                        <i class="fas fa-stop"></i>
-                    </button>
-                </div>
-
-                <div class="absolute top-4 left-4 bg-white/90 px-3 py-1 rounded-md text-sm shadow-sm flex flex-col gap-1">
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="enable-detect" checked />
-                        <span class="font-medium">Deteksi Wajah</span>
-                    </div>
-                    <div id="face-status" class="text-xs font-bold text-gray-600">Status: Memuat AI...</div>
-                </div>
-            </div>
-        </div>
-
-        {{-- Presensi Actions --}}
-        <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <button id="presensi-masuk" class="bg-green-600 hover:bg-green-700 justify-center text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
-                <i class="fas fa-sign-in-alt"></i> <span>Presensi Masuk</span>
-            </button>
-
-            <button id="presensi-pulang" class="bg-blue-600 hover:bg-blue-700 justify-center text-white px-6 py-3 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>
-                <i class="fas fa-sign-out-alt"></i> <span>Presensi Pulang</span>
-            </button>
-        </div>
-
-        <div id="status-message" class="mt-4 text-center hidden">
-            <p id="status-text" class="text-sm font-medium"></p>
-        </div>
-    </div>
 </div>
 
 <style>
